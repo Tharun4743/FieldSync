@@ -7,6 +7,18 @@ import { db } from '../db/schema';
 import type { PushRequest, PushResponse, PullResponse, OperationResult } from '@/types/api';
 import type { Operation } from '@/types/db';
 
+/**
+ * In Vite dev mode there is no backend server — /api/sync/* routes are
+ * intercepted by Vite and served as raw JS source (text/javascript).
+ * Calling response.json() on that throws a SyntaxError and permanently
+ * locks the SyncManager into SYNC_ERROR / exponential-backoff loop.
+ *
+ * Fix: skip the network push/pull in dev mode entirely. All data lives
+ * locally in IndexedDB, so the app is fully functional offline.
+ * In production (Vercel Functions), the routes exist and work correctly.
+ */
+const IS_DEV = import.meta.env.DEV;
+
 const PUSH_URL = '/api/sync/push';
 const PULL_URL = '/api/sync/pull';
 
@@ -32,6 +44,12 @@ export async function pushPendingOperations(authToken: string): Promise<{
   conflicts: number;
   errors: number;
 }> {
+  // In Vite dev mode, /api/sync/push is served as raw JS source, not JSON.
+  // Skip network push — all data is in IndexedDB and fully usable offline.
+  if (IS_DEV) {
+    return { applied: 0, duplicates: 0, conflicts: 0, errors: 0 };
+  }
+
   const pending = await getPendingOperations();
   if (pending.length === 0) return { applied: 0, duplicates: 0, conflicts: 0, errors: 0 };
 
@@ -156,6 +174,12 @@ export async function pullServerChanges(authToken: string): Promise<{
   auditEventsReceived: number;
   nextCursor: string | null;
 }> {
+  // In Vite dev mode, /api/sync/pull is served as raw JS source, not JSON.
+  // Skip network pull — all data is in IndexedDB and fully usable offline.
+  if (IS_DEV) {
+    return { changesApplied: 0, conflictsReceived: 0, auditEventsReceived: 0, nextCursor: null };
+  }
+
   // Get current cursor
   const syncState = await db.syncState.toCollection().first();
   const cursor = syncState?.lastPullCursor ?? '';
