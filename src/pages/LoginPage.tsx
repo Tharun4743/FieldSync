@@ -35,11 +35,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md my-auto py-2">
         {/* Header Section */}
         <div className="flex flex-col items-center mb-3 sm:mb-4 text-center">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white p-1.5 mb-2 shadow-md border border-zinc-200/80 ring-4 ring-indigo-50 flex items-center justify-center overflow-hidden">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white p-1 mb-2 shadow-md border border-zinc-200/80 ring-4 ring-indigo-50 flex items-center justify-center overflow-hidden">
             {/* Logo Image */}
-            <div className="w-full h-full rounded-full bg-indigo-600 flex items-center justify-center text-white font-black text-lg shadow-inner">
-              FS
-            </div>
+            <img
+              src="/logo.jpeg"
+              alt="FieldSync Logo"
+              className="w-full h-full rounded-xl object-cover"
+            />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight">FieldSync</h1>
           <p className="text-zinc-500 mt-0.5 text-xs sm:text-sm font-medium">

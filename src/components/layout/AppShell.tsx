@@ -40,6 +40,12 @@ function StatusBar({ onOpenSearch }: { onOpenSearch: () => void }) {
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-white/95 backdrop-blur border-b border-zinc-200/80 text-xs text-zinc-700 shadow-2xs z-20 flex-wrap sm:flex-nowrap">
+      {/* Mobile Brand Logo */}
+      <div className="flex items-center gap-2 md:hidden pr-1 border-r border-zinc-200">
+        <img src="/logo.jpeg" alt="FieldSync" className="w-5 h-5 rounded-md object-cover border border-zinc-200 shadow-2xs" />
+        <span className="font-black text-zinc-900 text-xs tracking-tight">FieldSync</span>
+      </div>
+
       {/* Real Connection status */}
       <div className="flex items-center gap-1.5">
         {status === 'ONLINE' ? (
@@ -175,9 +181,11 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
       {/* Logo */}
       <div className="px-5 py-4 border-b border-zinc-100">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center font-black text-sm text-white shadow-md shadow-indigo-100">
-            FS
-          </div>
+          <img
+            src="/logo.jpeg"
+            alt="FieldSync Logo"
+            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-zinc-200/80"
+          />
           <div>
             <p className="font-black text-zinc-900 text-base tracking-tight leading-tight">FieldSync</p>
             <p className="text-[11px] font-medium text-zinc-500">Offline Field Inspection</p>

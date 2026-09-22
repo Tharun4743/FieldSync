@@ -95,13 +95,18 @@ export default function Profile() {
         </div>
 
         {/* Logout Action */}
-        <div className="pt-2 border-t border-zinc-100">
+        <div className="pt-2 border-t border-zinc-100 space-y-4">
           <button
             onClick={() => void handleSignOut()}
             className="w-full h-11 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <LogOut size={16} /> Sign Out of FieldSync
           </button>
+
+          <div className="flex items-center justify-center gap-2 text-zinc-400 text-xs font-medium">
+            <img src="/logo.jpeg" alt="FieldSync" className="w-4 h-4 rounded-md object-cover" />
+            <span>FieldSync Offline-First Platform · Academic Release</span>
+          </div>
         </div>
       </div>
     </div>
