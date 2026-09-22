@@ -26,6 +26,7 @@ import DigitalSignatureTab from '../components/inspection/DigitalSignatureTab';
 import AssetServiceHistoryTab from '../components/inspection/AssetServiceHistoryTab';
 import SlaManagementTab from '../components/inspection/SlaManagementTab';
 import SlaCountdownBadge from '../components/inspection/SlaCountdownBadge';
+import InvoiceTab from '../components/billing/InvoiceTab';
 import type { ChecklistItem, InspectionResult, Inspection, Asset, Note, AssetScanEvent } from '@/types/db';
 import type * as Y from 'yjs';
 
@@ -35,6 +36,7 @@ type Tab =
   | 'measurements'
   | 'evidence'
   | 'signature'
+  | 'billing'
   | 'asset-history'
   | 'sla'
   | 'notes'
@@ -394,6 +396,7 @@ export default function InspectionDetailPage() {
     { key: 'measurements',  label: 'Measurements' },
     { key: 'evidence',      label: 'Before / After' },
     { key: 'signature',     label: 'Signatures' },
+    { key: 'billing',       label: 'Billing & Invoice' },
     { key: 'asset-history', label: 'Equipment History' },
     { key: 'sla',           label: 'SLA Protocol' },
     { key: 'notes',         label: 'Notes' },
@@ -604,6 +607,9 @@ export default function InspectionDetailPage() {
             )}
             {activeTab === 'signature' && (
               <DigitalSignatureTab inspection={inspection} readOnly={isReadOnly} />
+            )}
+            {activeTab === 'billing' && (
+              <InvoiceTab inspection={inspection} readOnly={isReadOnly} />
             )}
             {activeTab === 'asset-history' && (
               <AssetServiceHistoryTab asset={asset} currentInspectionId={id!} />

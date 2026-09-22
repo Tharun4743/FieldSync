@@ -456,3 +456,41 @@ export interface SlaTracking {
   lastEscalatedAt?: string;
 }
 
+// ============================================================
+// 6. Billing, Invoices & QR Payment Flow
+// ============================================================
+export type InvoiceStatus = 'GENERATED' | 'PAYMENT_PENDING' | 'PAID' | 'CANCELLED';
+export type PaymentMethod = 'UPI_QR' | 'CARD' | 'NET_BANKING' | 'CASH';
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  inspectionId: string;
+  inspectionTitle: string;
+  customerId?: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  technicianId: string;
+  technicianName: string;
+  labourCharges: number;
+  partsCharges: number;
+  travelCharges: number;
+  otherCharges: number;
+  discount: number;
+  taxPercent: number;
+  taxAmount: number;
+  subtotal: number;
+  grandTotal: number;
+  status: InvoiceStatus;
+  paymentMethod?: PaymentMethod;
+  paymentReference?: string;
+  paidAt?: string;
+  qrPayload: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: 'SYNCED' | 'PENDING';
+}
+
+

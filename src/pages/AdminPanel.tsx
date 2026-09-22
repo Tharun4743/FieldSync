@@ -20,10 +20,12 @@ import {
   AlertTriangle,
   Trash2,
   UserCheck,
+  Receipt,
 } from 'lucide-react';
+import AdminInvoicesTab from '@/components/admin/AdminInvoicesTab';
 
 // ── Types for forms ──────────────────────────────────────────────────────────
-type AdminTab = 'users' | 'inspections' | 'assets' | 'system';
+type AdminTab = 'users' | 'inspections' | 'assets' | 'invoices' | 'system';
 
 const ROLE_COLORS: Record<UserRole, string> = {
   CUSTOMER: 'bg-amber-50 text-amber-800 border-amber-200',
@@ -80,6 +82,7 @@ export default function AdminPanel() {
           { key: 'users', label: 'Users', icon: Users },
           { key: 'inspections', label: 'Inspections', icon: ClipboardList },
           { key: 'assets', label: 'Assets', icon: Wrench },
+          { key: 'invoices', label: 'Invoices & Billing', icon: Receipt },
           { key: 'system', label: 'System', icon: HardDrive },
         ] as { key: AdminTab; label: string; icon: React.FC<{ size: number; className?: string }> }[]).map(({ key, label, icon: Icon }) => (
           <button
@@ -107,6 +110,9 @@ export default function AdminPanel() {
       )}
       {activeTab === 'assets' && (
         <AssetsTab showMessage={showMessage} />
+      )}
+      {activeTab === 'invoices' && (
+        <AdminInvoicesTab showMessage={showMessage} />
       )}
       {activeTab === 'system' && (
         <SystemTab showMessage={showMessage} />

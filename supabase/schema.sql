@@ -169,6 +169,41 @@ CREATE TABLE IF NOT EXISTS public.sla_policies (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 5. Enterprise Invoices & QR Payment Flow
+CREATE TABLE IF NOT EXISTS public.invoices (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  invoice_number TEXT NOT NULL UNIQUE,
+  inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE,
+  inspection_title TEXT,
+  customer_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  customer_name TEXT NOT NULL,
+  customer_email TEXT,
+  customer_phone TEXT,
+  technician_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  technician_name TEXT NOT NULL,
+  labour_charges NUMERIC NOT NULL DEFAULT 0,
+  parts_charges NUMERIC NOT NULL DEFAULT 0,
+  travel_charges NUMERIC NOT NULL DEFAULT 0,
+  other_charges NUMERIC NOT NULL DEFAULT 0,
+  discount NUMERIC NOT NULL DEFAULT 0,
+  tax_percent NUMERIC NOT NULL DEFAULT 18,
+  tax_amount NUMERIC NOT NULL DEFAULT 0,
+  subtotal NUMERIC NOT NULL DEFAULT 0,
+  grand_total NUMERIC NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('GENERATED', 'PAYMENT_PENDING', 'PAID', 'CANCELLED')) DEFAULT 'GENERATED',
+  payment_method TEXT,
+  payment_reference TEXT,
+  paid_at TIMESTAMPTZ,
+  qr_payload TEXT NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_inspection ON public.invoices(inspection_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_customer ON public.invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON public.invoices(status);
+
 -- Checklist Items
 CREATE TABLE IF NOT EXISTS public.checklist_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -419,6 +454,10 @@ DROP POLICY IF EXISTS "Authenticated users can insert audit_events" ON public.au
 CREATE POLICY "Authenticated users can insert audit_events" ON public.audit_events FOR INSERT TO authenticated WITH CHECK (true);
 DROP POLICY IF EXISTS "Authenticated users can manage yjs_updates" ON public.yjs_updates;
 CREATE POLICY "Authenticated users can manage yjs_updates" ON public.yjs_updates FOR ALL TO authenticated USING (true);
+
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can manage invoices" ON public.invoices;
+CREATE POLICY "Authenticated users can manage invoices" ON public.invoices FOR ALL TO authenticated USING (true);
 
 -- ── 6. Seed Data: 5 Real Users for All Roles ─────────────────────────────────
 

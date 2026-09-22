@@ -208,6 +208,7 @@ describe('Offline Productivity Layer — Core Feature Suite', () => {
       expect(db.tables.some((t) => t.name === 'assetScanEvents')).toBe(true);
       expect(db.tables.some((t) => t.name === 'workEvidence')).toBe(true);
       expect(db.tables.some((t) => t.name === 'digitalSignatures')).toBe(true);
+      expect(db.tables.some((t) => t.name === 'invoices')).toBe(true);
     });
   });
 });

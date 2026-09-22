@@ -22,10 +22,11 @@ import type {
   DigitalSignature,
   AssetServiceHistoryItem,
   SlaTracking,
+  Invoice,
 } from '@/types/db';
 
 // ============================================================
-// FieldSync Local Database — Dexie v4
+// FieldSync Local Database — Dexie v5
 //
 // Schema version history:
 //   v1 — Initial schema (all core tables)
@@ -35,6 +36,7 @@ import type {
 //        Added localBlob to media (store actual file)
 //   v3 — Offline productivity (voiceNotes, inspectionProgress, offlinePackages)
 //   v4 — 5 Enterprise Features: QR Scan, Before/After Evidence, Signatures, History, SLA
+//   v5 — Billing, Invoices & QR Payment Flow
 //
 // NEVER delete a version entry — only add new ones.
 // NEVER reset the database to handle schema changes.
@@ -63,6 +65,7 @@ class FieldSyncDatabase extends Dexie {
   digitalSignatures!: EntityTable<DigitalSignature, 'id'>;
   assetServiceHistory!: EntityTable<AssetServiceHistoryItem, 'id'>;
   slaTracking!: EntityTable<SlaTracking, 'inspectionId'>;
+  invoices!: EntityTable<Invoice, 'id'>;
 
   constructor() {
     super('FieldSyncDB');
@@ -227,6 +230,49 @@ class FieldSyncDatabase extends Dexie {
           value: '4',
         });
       });
+
+    // ── Version 5 — Billing, Invoices & QR Payment Flow ─────────
+    //   - invoices: full invoice records with labour, parts, travel, tax, QR payment
+    this.version(5)
+      .stores({
+        users: 'id, email, role',
+        devices: 'deviceId, userId',
+        inspections: 'id, status, priority, assetId, *assignedTo, syncStatus, updatedAt',
+        assets: 'id, assetCode, type',
+        checklistItems: 'id, inspectionId, order',
+        inspectionResults: 'id, [inspectionId+checklistItemId], inspectionId, checklistItemId, updatedBy, syncStatus',
+        notes: 'id, inspectionId, authorId, syncStatus',
+        media: 'id, inspectionId, checklistItemId, uploadStatus, syncStatus',
+        operations: 'operationId, deviceId, userId, entityType, entityId, syncStatus, logicalClock, createdAt',
+        conflicts: 'id, inspectionId, entityType, entityId, status, createdAt',
+        auditEvents: 'id, operationId, userId, entityType, entityId, inspectionId, action, createdAt',
+        syncState: 'deviceId',
+        appMetadata: 'key',
+        voiceNotes: 'id, inspectionId, checklistItemId, technicianId, uploadStatus, syncStatus, createdAt',
+        inspectionProgress: 'inspectionId, lastOpenedAt',
+        offlinePackages: 'id, downloadedAt, status',
+        userSettings: 'key',
+        assetScanEvents: 'id, assetId, inspectionId, scannedBy, isMatch, scannedAt, syncStatus',
+        workEvidence: 'id, inspectionId, stage, capturedBy, capturedAt, syncStatus',
+        digitalSignatures: 'id, inspectionId, signerId, signerRole, signedAt, syncStatus',
+        assetServiceHistory: 'id, assetId, inspectionId, completedAt',
+        slaTracking: 'inspectionId, priority, category, isResponseBreached, isResolutionBreached, escalationLevel',
+        invoices: 'id, invoiceNumber, inspectionId, customerId, technicianId, status, createdAt, syncStatus',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('appMetadata').put({
+          key: 'lastMigration',
+          value: JSON.stringify({
+            fromVersion: 4,
+            toVersion: 5,
+            migratedAt: new Date().toISOString(),
+          }),
+        });
+        await tx.table('appMetadata').put({
+          key: 'schemaVersion',
+          value: '5',
+        });
+      });
   }
 }
 
@@ -234,4 +280,4 @@ class FieldSyncDatabase extends Dexie {
 export const db = new FieldSyncDatabase();
 
 // Current schema version — must match the highest version() call above
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;

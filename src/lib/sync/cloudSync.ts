@@ -1,7 +1,7 @@
 import { supabase } from '../auth/supabaseClient';
 import { db } from '../db/schema';
 import { seedLocalDatabase, ensureDefaultUsers } from '../db/seed';
-import type { Inspection, Asset, ChecklistItem, AuditEvent } from '@/types/db';
+import type { Inspection, Asset, ChecklistItem, AuditEvent, Invoice } from '@/types/db';
 
 export async function syncFromSupabase(): Promise<boolean> {
   try {
@@ -121,6 +121,47 @@ export async function syncFromSupabase(): Promise<boolean> {
       }));
       await db.auditEvents.bulkPut(localAuditEvents);
       console.info(`[CloudSync] Synced ${localAuditEvents.length} audit events directly from Supabase.`);
+    }
+
+    // 5. Fetch remote invoices from Supabase
+    const { data: remoteInvoices } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (remoteInvoices && remoteInvoices.length > 0) {
+      const localInvoices: Invoice[] = remoteInvoices.map((row) => ({
+        id: row.id,
+        invoiceNumber: row.invoice_number,
+        inspectionId: row.inspection_id,
+        inspectionTitle: row.inspection_title || '',
+        customerId: row.customer_id ?? undefined,
+        customerName: row.customer_name || 'Valued Client',
+        customerEmail: row.customer_email ?? undefined,
+        customerPhone: row.customer_phone ?? undefined,
+        technicianId: row.technician_id ?? '',
+        technicianName: row.technician_name || 'Field Technician',
+        labourCharges: Number(row.labour_charges || 0),
+        partsCharges: Number(row.parts_charges || 0),
+        travelCharges: Number(row.travel_charges || 0),
+        otherCharges: Number(row.other_charges || 0),
+        discount: Number(row.discount || 0),
+        taxPercent: Number(row.tax_percent || 18),
+        taxAmount: Number(row.tax_amount || 0),
+        subtotal: Number(row.subtotal || 0),
+        grandTotal: Number(row.grand_total || 0),
+        status: row.status as import('@/types/db').InvoiceStatus,
+        paymentMethod: row.payment_method ?? undefined,
+        paymentReference: row.payment_reference ?? undefined,
+        paidAt: row.paid_at ?? undefined,
+        qrPayload: row.qr_payload,
+        notes: row.notes ?? undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        syncStatus: 'SYNCED',
+      }));
+      await db.invoices.bulkPut(localInvoices);
+      console.info(`[CloudSync] Synced ${localInvoices.length} invoices from Supabase.`);
     }
 
     return true;
