@@ -99,6 +99,14 @@ export interface Inspection {
   verifiedByName?: string;
   verifiedAt?: string; // timestamp of supervisor verification
   resolutionSummary?: string; // final sign-off / resolution notes for customer
+  // ── Advanced Feature Fields ─────────────────────────
+  assetVerifiedAt?: string; // QR scan verification timestamp
+  assetVerifiedBy?: string; // user ID who verified QR
+  assetVerifiedCode?: string; // code decoded from QR/barcode
+  responseDeadline?: string; // SLA response cutoff
+  resolutionDeadline?: string; // SLA resolution cutoff
+  slaStatus?: 'ON_TRACK' | 'AT_RISK' | 'BREACHED' | 'MET';
+  escalationLevel?: number; // 0: Normal, 1: Supervisor, 2: Admin
   assignedAt: string;
   scheduledDate?: string;
   createdAt: string;
@@ -345,5 +353,106 @@ export interface OfflineWorkPackage {
 export interface UserSettings {
   key: string; // e.g. 'language', 'speechEnabled'
   value: string;
+}
+
+// ============================================================
+// 1. QR / Barcode Asset Identification
+// ============================================================
+export interface AssetScanEvent {
+  id: string;
+  assetId: string;
+  inspectionId: string;
+  scannedCode: string;
+  expectedCode: string;
+  isMatch: boolean;
+  scannedBy: string; // user id
+  scannerName: string;
+  deviceId: string;
+  scannedAt: string;
+  syncStatus: 'SYNCED' | 'PENDING';
+}
+
+// ============================================================
+// 2. Before / After Evidence
+// ============================================================
+export type EvidenceStage = 'BEFORE' | 'AFTER';
+
+export interface WorkEvidence {
+  id: string;
+  inspectionId: string;
+  stage: EvidenceStage;
+  title: string;
+  description?: string;
+  photoUrl?: string; // remote Cloudinary URL
+  localBlob?: Blob; // local cache for offline-first instant display
+  localBlobReference?: string;
+  capturedBy: string; // user id
+  capturedByName: string;
+  capturedAt: string;
+  gpsLatitude?: number;
+  gpsLongitude?: number;
+  syncStatus: 'SYNCED' | 'PENDING';
+}
+
+// ============================================================
+// 3. Digital Signature Sign-Off
+// ============================================================
+export type SignatureRole = 'TECHNICIAN' | 'SUPERVISOR' | 'CUSTOMER';
+
+export interface DigitalSignature {
+  id: string;
+  inspectionId: string;
+  signerId: string;
+  signerName: string;
+  signerRole: SignatureRole;
+  signatureDataUrl: string; // base64 PNG data URL
+  signedAt: string;
+  declarationText: string;
+  checksum?: string;
+  syncStatus: 'SYNCED' | 'PENDING';
+}
+
+// ============================================================
+// 4. Asset Service History
+// ============================================================
+export interface AssetServiceHistoryItem {
+  id: string;
+  assetId: string;
+  inspectionId: string;
+  title: string;
+  category: ServiceCategory;
+  resolutionSummary?: string;
+  technicianName?: string;
+  supervisorName?: string;
+  completedAt: string;
+  status: InspectionStatus;
+}
+
+// ============================================================
+// 5. SLA & Escalation Management
+// ============================================================
+export interface SlaPolicy {
+  id: string;
+  priority: InspectionPriority;
+  category: ServiceCategory | 'ALL';
+  responseMinutes: number; // Max time to assign & acknowledge
+  resolutionMinutes: number; // Max time to resolve issue
+  escalation1Minutes: number; // Notify Supervisor
+  escalation2Minutes: number; // Escalate to Admin
+}
+
+export interface SlaTracking {
+  inspectionId: string;
+  priority: InspectionPriority;
+  category: ServiceCategory;
+  raisedAt: string;
+  responseDeadline: string;
+  resolutionDeadline: string;
+  respondedAt?: string;
+  resolvedAt?: string;
+  isResponseBreached: boolean;
+  isResolutionBreached: boolean;
+  escalationLevel: 0 | 1 | 2; // 0=normal, 1=supervisor, 2=admin
+  lastEscalatedAt?: string;
 }
 

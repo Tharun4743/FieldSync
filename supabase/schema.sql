@@ -102,9 +102,71 @@ CREATE TABLE IF NOT EXISTS public.inspections (
   verified_at TIMESTAMPTZ,
   resolution_summary TEXT,
   scheduled_date DATE,
+  -- ── 5 Production Features Fields ─────────────────────────
+  asset_verified_at TIMESTAMPTZ,
+  asset_verified_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  asset_verified_code TEXT,
+  response_deadline TIMESTAMPTZ,
+  resolution_deadline TIMESTAMPTZ,
+  escalation_level INT DEFAULT 0,
   version INT NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 1. Asset Scan Events (QR / Barcode physical verification)
+CREATE TABLE IF NOT EXISTS public.asset_scan_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  asset_id UUID NOT NULL REFERENCES public.assets(id) ON DELETE CASCADE,
+  inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE,
+  scanned_code TEXT NOT NULL,
+  expected_code TEXT NOT NULL,
+  is_match BOOLEAN NOT NULL DEFAULT TRUE,
+  scanned_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  scanner_name TEXT,
+  device_id TEXT,
+  scanned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 2. Dual-Stage Before / After Evidence
+CREATE TABLE IF NOT EXISTS public.work_evidence (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE,
+  stage TEXT NOT NULL CHECK (stage IN ('BEFORE', 'AFTER')),
+  title TEXT NOT NULL,
+  description TEXT,
+  photo_url TEXT,
+  captured_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  captured_by_name TEXT,
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  gps_latitude NUMERIC,
+  gps_longitude NUMERIC,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 3. Digital Signatures & Compliance Sign-Off
+CREATE TABLE IF NOT EXISTS public.digital_signatures (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE,
+  signer_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  signer_name TEXT NOT NULL,
+  signer_role TEXT NOT NULL CHECK (signer_role IN ('TECHNICIAN', 'SUPERVISOR', 'CUSTOMER')),
+  signature_data_url TEXT NOT NULL,
+  signed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  declaration_text TEXT NOT NULL,
+  checksum TEXT
+);
+
+-- 4. Enterprise SLA Policies
+CREATE TABLE IF NOT EXISTS public.sla_policies (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  priority TEXT NOT NULL CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
+  category TEXT DEFAULT 'ALL',
+  response_minutes INT NOT NULL,
+  resolution_minutes INT NOT NULL,
+  escalation_1_minutes INT NOT NULL,
+  escalation_2_minutes INT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Checklist Items

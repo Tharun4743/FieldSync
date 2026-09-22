@@ -17,6 +17,11 @@ import type {
   InspectionProgress,
   OfflineWorkPackage,
   UserSettings,
+  AssetScanEvent,
+  WorkEvidence,
+  DigitalSignature,
+  AssetServiceHistoryItem,
+  SlaTracking,
 } from '@/types/db';
 
 // ============================================================
@@ -28,6 +33,8 @@ import type {
 //        Added unit/minValue/maxValue/options to checklistItems
 //        Added retryCount/lastError to operations
 //        Added localBlob to media (store actual file)
+//   v3 — Offline productivity (voiceNotes, inspectionProgress, offlinePackages)
+//   v4 — 5 Enterprise Features: QR Scan, Before/After Evidence, Signatures, History, SLA
 //
 // NEVER delete a version entry — only add new ones.
 // NEVER reset the database to handle schema changes.
@@ -51,6 +58,11 @@ class FieldSyncDatabase extends Dexie {
   inspectionProgress!: EntityTable<InspectionProgress, 'inspectionId'>;
   offlinePackages!: EntityTable<OfflineWorkPackage, 'id'>;
   userSettings!: EntityTable<UserSettings, 'key'>;
+  assetScanEvents!: EntityTable<AssetScanEvent, 'id'>;
+  workEvidence!: EntityTable<WorkEvidence, 'id'>;
+  digitalSignatures!: EntityTable<DigitalSignature, 'id'>;
+  assetServiceHistory!: EntityTable<AssetServiceHistoryItem, 'id'>;
+  slaTracking!: EntityTable<SlaTracking, 'inspectionId'>;
 
   constructor() {
     super('FieldSyncDB');
@@ -169,6 +181,52 @@ class FieldSyncDatabase extends Dexie {
           value: '3',
         });
       });
+
+    // ── Version 4 — 5 Enterprise Features ───────────────────────
+    //   - assetScanEvents: QR / barcode physical asset verification
+    //   - workEvidence: dual-stage BEFORE / AFTER photo evidence
+    //   - digitalSignatures: technician completion & supervisor sign-offs
+    //   - assetServiceHistory: past service events & inspection logs
+    //   - slaTracking: SLA deadlines, breach timers, escalation levels
+    this.version(4)
+      .stores({
+        users: 'id, email, role',
+        devices: 'deviceId, userId',
+        inspections: 'id, status, priority, assetId, *assignedTo, syncStatus, updatedAt',
+        assets: 'id, assetCode, type',
+        checklistItems: 'id, inspectionId, order',
+        inspectionResults: 'id, [inspectionId+checklistItemId], inspectionId, checklistItemId, updatedBy, syncStatus',
+        notes: 'id, inspectionId, authorId, syncStatus',
+        media: 'id, inspectionId, checklistItemId, uploadStatus, syncStatus',
+        operations: 'operationId, deviceId, userId, entityType, entityId, syncStatus, logicalClock, createdAt',
+        conflicts: 'id, inspectionId, entityType, entityId, status, createdAt',
+        auditEvents: 'id, operationId, userId, entityType, entityId, inspectionId, action, createdAt',
+        syncState: 'deviceId',
+        appMetadata: 'key',
+        voiceNotes: 'id, inspectionId, checklistItemId, technicianId, uploadStatus, syncStatus, createdAt',
+        inspectionProgress: 'inspectionId, lastOpenedAt',
+        offlinePackages: 'id, downloadedAt, status',
+        userSettings: 'key',
+        assetScanEvents: 'id, assetId, inspectionId, scannedBy, isMatch, scannedAt, syncStatus',
+        workEvidence: 'id, inspectionId, stage, capturedBy, capturedAt, syncStatus',
+        digitalSignatures: 'id, inspectionId, signerId, signerRole, signedAt, syncStatus',
+        assetServiceHistory: 'id, assetId, inspectionId, completedAt',
+        slaTracking: 'inspectionId, priority, category, isResponseBreached, isResolutionBreached, escalationLevel',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('appMetadata').put({
+          key: 'lastMigration',
+          value: JSON.stringify({
+            fromVersion: 3,
+            toVersion: 4,
+            migratedAt: new Date().toISOString(),
+          }),
+        });
+        await tx.table('appMetadata').put({
+          key: 'schemaVersion',
+          value: '4',
+        });
+      });
   }
 }
 
@@ -176,4 +234,4 @@ class FieldSyncDatabase extends Dexie {
 export const db = new FieldSyncDatabase();
 
 // Current schema version — must match the highest version() call above
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;

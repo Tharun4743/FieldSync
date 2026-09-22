@@ -199,12 +199,15 @@ describe('Offline Productivity Layer — Core Feature Suite', () => {
   });
 
   describe('Schema Evolution & Data Integrity', () => {
-    it('uses Schema Version 3 and has all essential offline productivity tables', () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe(3);
+    it('uses Schema Version >= 3 and has all essential offline productivity and enterprise tables', () => {
+      expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(3);
       expect(db.tables.some((t) => t.name === 'voiceNotes')).toBe(true);
       expect(db.tables.some((t) => t.name === 'inspectionProgress')).toBe(true);
       expect(db.tables.some((t) => t.name === 'offlinePackages')).toBe(true);
       expect(db.tables.some((t) => t.name === 'userSettings')).toBe(true);
+      expect(db.tables.some((t) => t.name === 'assetScanEvents')).toBe(true);
+      expect(db.tables.some((t) => t.name === 'workEvidence')).toBe(true);
+      expect(db.tables.some((t) => t.name === 'digitalSignatures')).toBe(true);
     });
   });
 });

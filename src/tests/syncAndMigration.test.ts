@@ -103,9 +103,9 @@ describe('Offline Sync, Idempotency & CRDT Tests', () => {
     expect(pendingOps.length).toBe(3);
   });
 
-  it('preserves existing records during schema version 3 upgrade', async () => {
-    // Check that schema version is 3
-    expect(CURRENT_SCHEMA_VERSION).toBe(3);
+  it('preserves existing records during schema version upgrades', async () => {
+    // Check that schema version is >= 3
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(3);
 
     // Verify that all core entity stores exist
     const tableNames = db.tables.map((t) => t.name);

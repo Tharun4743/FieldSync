@@ -17,13 +17,30 @@ import OverviewTab from '../components/inspection/OverviewTab';
 import VoiceNotesTab from '../components/inspection/VoiceNotesTab';
 import QuickInspectionView from '../components/inspection/QuickInspectionView';
 import { saveProgress, syncProgressFromDB } from '../lib/db/repositories/progress';
-import { ArrowLeft, AlertTriangle, Zap, CheckCircle2, Send, Clock } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Zap, CheckCircle2, Send, Clock, QrCode, ShieldCheck } from 'lucide-react';
 import WorkflowStepper from '../components/inspection/WorkflowStepper';
 import SupervisorWorkflowActions from '../components/inspection/SupervisorWorkflowActions';
-import type { ChecklistItem, InspectionResult, Inspection, Asset, Note } from '@/types/db';
+import QrScannerModal from '../components/inspection/QrScannerModal';
+import BeforeAfterEvidenceTab from '../components/inspection/BeforeAfterEvidenceTab';
+import DigitalSignatureTab from '../components/inspection/DigitalSignatureTab';
+import AssetServiceHistoryTab from '../components/inspection/AssetServiceHistoryTab';
+import SlaManagementTab from '../components/inspection/SlaManagementTab';
+import SlaCountdownBadge from '../components/inspection/SlaCountdownBadge';
+import type { ChecklistItem, InspectionResult, Inspection, Asset, Note, AssetScanEvent } from '@/types/db';
 import type * as Y from 'yjs';
 
-type Tab = 'overview' | 'checklist' | 'measurements' | 'notes' | 'voice' | 'photos' | 'history';
+type Tab =
+  | 'overview'
+  | 'checklist'
+  | 'measurements'
+  | 'evidence'
+  | 'signature'
+  | 'asset-history'
+  | 'sla'
+  | 'notes'
+  | 'voice'
+  | 'photos'
+  | 'history';
 
 export default function InspectionDetailPage() {
   const { id, tab: tabParam } = useParams<{ id: string; tab?: Tab }>();
@@ -35,6 +52,7 @@ export default function InspectionDetailPage() {
   const [, setYjsDoc] = useState<Y.Doc | null>(null);
   const [submittingWork, setSubmittingWork] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   // Check URL parameters (e.g. ?mode=quick or ?item=xxx)
   useEffect(() => {
@@ -304,6 +322,66 @@ export default function InspectionDetailPage() {
     }
   }
 
+  // ── Asset QR Verification Handler ──────────────────────────────
+  async function handleAssetQrVerified(scannedCode: string): Promise<void> {
+    if (!user || !id || !asset) return;
+
+    const now = new Date().toISOString();
+    const scanId = crypto.randomUUID();
+
+    const scanRecord: AssetScanEvent = {
+      id: scanId,
+      assetId: asset.id,
+      inspectionId: id,
+      scannedCode,
+      expectedCode: asset.assetCode,
+      isMatch: true,
+      scannedBy: user.id,
+      scannerName: user.fullName || 'Technician',
+      deviceId: 'device-local',
+      scannedAt: now,
+      syncStatus: 'PENDING',
+    };
+
+    await db.assetScanEvents.put(scanRecord);
+
+    await db.inspections.update(id, {
+      assetVerifiedAt: now,
+      assetVerifiedBy: user.id,
+      assetVerifiedCode: scannedCode,
+      localVersion: (inspection!.localVersion ?? 0) + 1,
+      updatedAt: now,
+      syncStatus: 'PENDING',
+    });
+
+    await createOperation({
+      userId: user.id,
+      inspectionId: id,
+      entityType: 'assetScanEvent',
+      entityId: scanId,
+      operationType: 'CREATE',
+      payload: {
+        assetId: asset.id,
+        inspectionId: id,
+        scannedCode,
+        verifiedAt: now,
+      },
+    });
+
+    await createAuditEvent({
+      userId: user.id,
+      userName: user.fullName,
+      inspectionId: id,
+      entityType: 'ASSET_SCAN',
+      entityId: scanId,
+      action: 'UPDATED',
+      field: 'assetVerification',
+      afterValue: `Asset ${asset.assetCode} verified on-site via QR scanner by ${user.fullName}`,
+    });
+
+    void syncManager.syncNow();
+  }
+
   const isSupervisor = user?.role === 'SUPERVISOR';
   const isAdmin = user?.role === 'ADMIN';
   const isCompleted = inspection.status === 'COMPLETED' || inspection.workflowStage === 'RESOLVED';
@@ -311,13 +389,17 @@ export default function InspectionDetailPage() {
   const isReadOnly = isSupervisor || isCompleted || (user?.role === 'TECHNICIAN' && isAwaitingVerification);
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview',     label: 'Overview' },
-    { key: 'checklist',    label: 'Checklist' },
-    { key: 'measurements', label: 'Measurements' },
-    { key: 'notes',        label: 'Notes' },
-    { key: 'voice',        label: 'Voice Notes' },
-    { key: 'photos',       label: 'Photos' },
-    { key: 'history',      label: 'History' },
+    { key: 'overview',      label: 'Overview' },
+    { key: 'checklist',     label: 'Checklist' },
+    { key: 'measurements',  label: 'Measurements' },
+    { key: 'evidence',      label: 'Before / After' },
+    { key: 'signature',     label: 'Signatures' },
+    { key: 'asset-history', label: 'Equipment History' },
+    { key: 'sla',           label: 'SLA Protocol' },
+    { key: 'notes',         label: 'Notes' },
+    { key: 'voice',         label: 'Voice Notes' },
+    { key: 'photos',        label: 'Photos' },
+    { key: 'history',       label: 'Audit Log' },
   ];
 
   return (
@@ -340,6 +422,26 @@ export default function InspectionDetailPage() {
                     {asset.assetCode}
                   </span>
                 )}
+
+                {/* QR Verification Status / Trigger */}
+                {asset && inspection.assetVerifiedAt ? (
+                  <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                    <ShieldCheck size={11} className="text-emerald-600" />
+                    Verified Tag ({inspection.assetVerifiedCode || asset.assetCode})
+                  </span>
+                ) : asset && !isReadOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsQrModalOpen(true)}
+                    className="text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs cursor-pointer animate-pulse transition-all"
+                  >
+                    <QrCode size={11} /> Scan Asset Tag
+                  </button>
+                ) : null}
+
+                {/* SLA Live Countdown Status Badge */}
+                <SlaCountdownBadge inspection={inspection} />
+
                 {isReadOnly && (
                   <span className="text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                     👁 Reviewer Mode
@@ -497,6 +599,18 @@ export default function InspectionDetailPage() {
                 readOnly={isReadOnly}
               />
             )}
+            {activeTab === 'evidence' && (
+              <BeforeAfterEvidenceTab inspectionId={id!} readOnly={isReadOnly} />
+            )}
+            {activeTab === 'signature' && (
+              <DigitalSignatureTab inspection={inspection} readOnly={isReadOnly} />
+            )}
+            {activeTab === 'asset-history' && (
+              <AssetServiceHistoryTab asset={asset} currentInspectionId={id!} />
+            )}
+            {activeTab === 'sla' && (
+              <SlaManagementTab inspection={inspection} />
+            )}
             {activeTab === 'notes' && (
               <NotesTab inspectionId={id!} onSubmit={handleNoteSubmit} readOnly={isReadOnly} />
             )}
@@ -512,6 +626,16 @@ export default function InspectionDetailPage() {
           </>
         )}
       </div>
+
+      {/* QR Scanner Modal */}
+      {asset && (
+        <QrScannerModal
+          isOpen={isQrModalOpen}
+          onClose={() => setIsQrModalOpen(false)}
+          expectedAsset={asset}
+          onVerified={handleAssetQrVerified}
+        />
+      )}
     </div>
   );
 }

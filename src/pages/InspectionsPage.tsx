@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../lib/db/database';
 import { useAuthStore } from '../stores/authStore';
-import { Search, MapPin, Clock, AlertTriangle, PlusCircle } from 'lucide-react';
+import { Search, MapPin, Clock, AlertTriangle, PlusCircle, ShieldCheck } from 'lucide-react';
 import ReportComplaintModal from '../components/inspection/ReportComplaintModal';
+import SlaCountdownBadge from '../components/inspection/SlaCountdownBadge';
 import type { Inspection, Asset, Conflict } from '@/types/db';
 
 type FilterOption = 'ALL' | 'RAISED' | 'FIELD_WORK' | 'AWAITING_VERIFICATION' | 'RESOLVED';
@@ -150,6 +151,13 @@ export default function InspectionsPage() {
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border uppercase ${getWorkflowStageBadge(stage)}`}>
                       {getWorkflowStageLabel(stage)}
                     </span>
+                    {inspection.assetVerifiedAt && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                        <ShieldCheck size={10} className="text-emerald-600" />
+                        Tag Verified
+                      </span>
+                    )}
+                    <SlaCountdownBadge inspection={inspection} />
                     {hasUnsynced && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                         Unsynced
