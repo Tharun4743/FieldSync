@@ -86,20 +86,23 @@ async function getCloudinarySignData(
 
   // 2. Client-side signing fallback
   const cloudName = (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string) || 'lt6lmhj9';
-  const apiKey = '449212441914195';
-  const apiSecret = 'qu7Z99BnHJ4PL3xsnc-AX7E5uQ0';
+  const apiKey = (import.meta.env.VITE_CLOUDINARY_API_KEY as string) || '';
+  const apiSecret = (import.meta.env.VITE_CLOUDINARY_API_SECRET as string) || '';
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = `fieldsync/${inspectionId}`;
   const publicId = `${inspectionId}/${mediaId}`;
   const uploadPreset = 'fieldsync-uploads';
   const uploadId = mediaId;
 
-  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}&upload_preset=${uploadPreset}`;
-  const enc = new TextEncoder();
-  const hash = await crypto.subtle.digest('SHA-1', enc.encode(paramsToSign + apiSecret));
-  const signature = Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  let signature = '';
+  if (apiSecret) {
+    const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}&upload_preset=${uploadPreset}`;
+    const enc = new TextEncoder();
+    const hash = await crypto.subtle.digest('SHA-1', enc.encode(paramsToSign + apiSecret));
+    signature = Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
 
   return {
     signature,
