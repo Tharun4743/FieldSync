@@ -158,8 +158,9 @@ db.version(3).stores({
 ### Installation & Local Setup
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/fieldsync.git
-cd fieldsync
+git clone https://github.com/Tharun4743/FieldSync.git
+cd FieldSync
+
 
 # Install dependencies
 npm install
