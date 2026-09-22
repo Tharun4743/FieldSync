@@ -8,9 +8,10 @@ import { useLanguageStore } from '@/stores/languageStore';
 
 interface Props {
   inspectionId: string;
+  readOnly?: boolean;
 }
 
-export default function VoiceNotesTab({ inspectionId }: Props) {
+export default function VoiceNotesTab({ inspectionId, readOnly }: Props) {
   const { user } = useAuthStore();
   const t = useLanguageStore((s) => s.t);
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
@@ -52,11 +53,13 @@ export default function VoiceNotesTab({ inspectionId }: Props) {
         <div>
           <h3 className="text-sm font-bold text-zinc-900">Voice Observations</h3>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Record audio notes offline. Plays instantly from device storage and syncs when online.
+            {readOnly
+              ? 'Playback-only view. Field technicians recorded these voice notes offline.'
+              : 'Record audio notes offline. Plays instantly from device storage and syncs when online.'}
           </p>
         </div>
 
-        {!showRecorder && (
+        {!readOnly && !showRecorder && (
           <button
             onClick={() => setShowRecorder(true)}
             className="h-10 px-4 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 shadow-xs shadow-indigo-100 transition-all cursor-pointer shrink-0"
@@ -68,7 +71,7 @@ export default function VoiceNotesTab({ inspectionId }: Props) {
         )}
       </div>
 
-      {showRecorder && (
+      {!readOnly && showRecorder && (
         <VoiceNoteRecorder
           inspectionId={inspectionId}
           onSaved={() => {

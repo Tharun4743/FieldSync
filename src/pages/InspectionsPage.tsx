@@ -3,20 +3,22 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../lib/db/database';
 import { useAuthStore } from '../stores/authStore';
-import { Search, MapPin, Clock, AlertTriangle } from 'lucide-react';
-import type { InspectionStatus, Inspection, Asset, Conflict } from '@/types/db';
+import { Search, MapPin, Clock, AlertTriangle, PlusCircle } from 'lucide-react';
+import ReportComplaintModal from '../components/inspection/ReportComplaintModal';
+import type { Inspection, Asset, Conflict } from '@/types/db';
 
-type FilterStatus = InspectionStatus | 'ALL';
+type FilterOption = 'ALL' | 'RAISED' | 'FIELD_WORK' | 'AWAITING_VERIFICATION' | 'RESOLVED';
 
 export default function InspectionsPage() {
   const { user } = useAuthStore();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>('ALL');
+  const [stageFilter, setStageFilter] = useState<FilterOption>('ALL');
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const inspections = useLiveQuery(() => db.inspections.toArray(), []);
   const assets = useLiveQuery(() => db.assets.toArray(), []);
   const conflictCounts = useLiveQuery(async () => {
-    const conflicts = await db.conflicts.where('status').equals('PENDING').toArray();
+    const conflicts = await db.conflicts.where('status').equals('OPEN').toArray();
     const counts: Record<string, number> = {};
     conflicts.forEach((c: Conflict) => {
       counts[c.inspectionId] = (counts[c.inspectionId] ?? 0) + 1;
@@ -30,30 +32,58 @@ export default function InspectionsPage() {
     const matchesSearch =
       i.title.toLowerCase().includes(search.toLowerCase()) ||
       i.siteName.toLowerCase().includes(search.toLowerCase()) ||
+      (i.reportedBy && i.reportedBy.toLowerCase().includes(search.toLowerCase())) ||
       assetMap[i.assetId]?.assetCode?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || i.status === statusFilter;
+
+    const currentStage = i.workflowStage ?? (
+      i.status === 'COMPLETED' ? 'RESOLVED' :
+      i.status === 'IN_PROGRESS' ? 'FIELD_WORK' :
+      (i.assignedTo?.length > 0 ? 'FIELD_WORK' : 'RAISED')
+    );
+
+    const matchesStage =
+      stageFilter === 'ALL' ||
+      (stageFilter === 'RAISED' && (currentStage === 'RAISED' || currentStage === 'ASSIGNED')) ||
+      (stageFilter === 'FIELD_WORK' && (currentStage === 'FIELD_WORK' || currentStage === 'COORDINATED' || currentStage === 'REWORK_REQUESTED')) ||
+      (stageFilter === 'AWAITING_VERIFICATION' && currentStage === 'AWAITING_VERIFICATION') ||
+      (stageFilter === 'RESOLVED' && (currentStage === 'RESOLVED' || i.status === 'COMPLETED'));
+
     const matchesUser =
       user?.role === 'ADMIN' ||
       user?.role === 'SUPERVISOR' ||
       i.assignedTo.includes(user?.id ?? '');
-    return matchesSearch && matchesStatus && matchesUser;
+
+    return matchesSearch && matchesStage && matchesUser;
   });
 
-  const statusOptions: { value: FilterStatus; label: string }[] = [
+  const stageOptions: { value: FilterOption; label: string }[] = [
     { value: 'ALL', label: 'All' },
-    { value: 'PENDING', label: 'Pending' },
-    { value: 'IN_PROGRESS', label: 'In Progress' },
-    { value: 'COMPLETED', label: 'Completed' },
+    { value: 'RAISED', label: 'Customer Raised' },
+    { value: 'FIELD_WORK', label: 'Field Work' },
+    { value: 'AWAITING_VERIFICATION', label: 'Awaiting Verify' },
+    { value: 'RESOLVED', label: 'Resolved' },
   ];
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight">Inspections</h1>
-        <p className="text-zinc-500 text-xs sm:text-sm font-medium mt-1">
-          {filtered?.length ?? 0} inspection{filtered?.length !== 1 ? 's' : ''} available
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight">Inspections &amp; Complaints</h1>
+          <p className="text-zinc-500 text-xs sm:text-sm font-medium mt-1">
+            {filtered?.length ?? 0} active item{filtered?.length !== 1 ? 's' : ''} across customer resolution lifecycle
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowReportModal(true)}
+          className="h-10 px-4 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-2 cursor-pointer shadow-md shadow-rose-200 transition-all self-start sm:self-auto"
+          id="btn-raise-complaint"
+        >
+          <PlusCircle size={15} />
+          Report Complaint / Raise Issue
+        </button>
       </div>
 
       {/* Search + Filter */}
@@ -69,13 +99,13 @@ export default function InspectionsPage() {
           />
         </div>
 
-        <div className="flex gap-1 bg-white p-1 rounded-xl border border-zinc-200 shadow-2xs">
-          {statusOptions.map(opt => (
+        <div className="flex gap-1 bg-white p-1 rounded-xl border border-zinc-200 shadow-2xs overflow-x-auto">
+          {stageOptions.map(opt => (
             <button
               key={opt.value}
-              onClick={() => setStatusFilter(opt.value)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-bold transition-all cursor-pointer ${
-                statusFilter === opt.value
+              onClick={() => setStageFilter(opt.value)}
+              className={`px-3 py-1.5 text-xs rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                stageFilter === opt.value
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
               }`}
@@ -90,7 +120,7 @@ export default function InspectionsPage() {
       <div className="space-y-3">
         {filtered?.length === 0 && (
           <div className="bg-white border border-zinc-200/80 rounded-2xl p-12 text-center shadow-sm">
-            <p className="text-sm font-semibold text-zinc-500">No inspections found matching criteria.</p>
+            <p className="text-sm font-semibold text-zinc-500">No inspections or complaints found matching criteria.</p>
           </div>
         )}
 
@@ -98,6 +128,11 @@ export default function InspectionsPage() {
           const asset = assetMap[inspection.assetId];
           const conflicts = conflictCounts?.[inspection.id] ?? 0;
           const hasUnsynced = inspection.localVersion > inspection.serverVersion;
+          const stage = inspection.workflowStage ?? (
+            inspection.status === 'COMPLETED' ? 'RESOLVED' :
+            inspection.status === 'IN_PROGRESS' ? 'FIELD_WORK' :
+            (inspection.assignedTo?.length > 0 ? 'FIELD_WORK' : 'RAISED')
+          );
 
           return (
             <Link
@@ -111,6 +146,9 @@ export default function InspectionsPage() {
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getPriorityBadge(inspection.priority)}`}>
                       {inspection.priority}
+                    </span>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border uppercase ${getWorkflowStageBadge(stage)}`}>
+                      {getWorkflowStageLabel(stage)}
                     </span>
                     {hasUnsynced && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
@@ -130,26 +168,45 @@ export default function InspectionsPage() {
                   {asset && (
                     <p className="text-zinc-500 text-xs mt-0.5 font-mono">{asset.assetCode} — {asset.name}</p>
                   )}
+                  {inspection.reportedBy && (
+                    <p className="text-zinc-600 text-[11px] font-medium mt-1">
+                      Reported by Customer: <span className="font-bold text-zinc-900">{inspection.reportedBy}</span>
+                    </p>
+                  )}
                 </div>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border shrink-0 ${getStatusBadge(inspection.status)}`}>
                   {inspection.status.replace('_', ' ')}
                 </span>
               </div>
 
-              <div className="flex items-center gap-4 mt-4 pt-3 border-t border-zinc-100 text-xs text-zinc-500 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <MapPin size={13} className="text-zinc-400" />
-                  {inspection.siteName}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock size={13} className="text-zinc-400" />
-                  {formatDate(inspection.assignedAt)}
-                </span>
+              <div className="flex items-center justify-between gap-4 mt-4 pt-3 border-t border-zinc-100 text-xs text-zinc-500 font-medium flex-wrap">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={13} className="text-zinc-400" />
+                    {inspection.siteName}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={13} className="text-zinc-400" />
+                    {formatDate(inspection.assignedAt)}
+                  </span>
+                </div>
+
+                {inspection.supervisorName && (
+                  <span className="text-[11px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-bold">
+                    Supervisor: {inspection.supervisorName}
+                  </span>
+                )}
               </div>
             </Link>
           );
         })}
       </div>
+
+      {/* Report Complaint / Defect Modal */}
+      <ReportComplaintModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
     </div>
   );
 }
@@ -177,6 +234,39 @@ function getStatusBadge(status: string): string {
       return 'bg-rose-50 text-rose-700 border-rose-200';
     default:
       return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+  }
+}
+
+function getWorkflowStageBadge(stage?: string): string {
+  switch (stage) {
+    case 'RAISED':
+      return 'bg-amber-50 text-amber-800 border-amber-300';
+    case 'ASSIGNED':
+      return 'bg-orange-50 text-orange-800 border-orange-300';
+    case 'COORDINATED':
+      return 'bg-purple-50 text-purple-800 border-purple-300';
+    case 'FIELD_WORK':
+    case 'REWORK_REQUESTED':
+      return 'bg-sky-50 text-sky-800 border-sky-300';
+    case 'AWAITING_VERIFICATION':
+      return 'bg-violet-50 text-violet-800 border-violet-300 animate-pulse';
+    case 'RESOLVED':
+      return 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    default:
+      return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+  }
+}
+
+function getWorkflowStageLabel(stage?: string): string {
+  switch (stage) {
+    case 'RAISED': return '1. Customer Raised';
+    case 'ASSIGNED': return '2. Admin Assigned';
+    case 'COORDINATED': return '3. Coordinated';
+    case 'FIELD_WORK': return '4. Field Work';
+    case 'REWORK_REQUESTED': return '4. Rework Needed';
+    case 'AWAITING_VERIFICATION': return '5. Awaiting Verify';
+    case 'RESOLVED': return '6. Resolved';
+    default: return stage ?? 'Pending';
   }
 }
 

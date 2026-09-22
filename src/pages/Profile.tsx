@@ -94,6 +94,47 @@ export default function Profile() {
           </div>
         </div>
 
+        {/* Role Switcher for Testing & Demonstration */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-zinc-50 to-indigo-50/40 border border-zinc-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
+              <Shield size={14} className="text-indigo-600" />
+              Active Role Switcher (Live Role Testing)
+            </h3>
+            <span className="text-[11px] font-semibold text-zinc-500">Instant Authorization Change</span>
+          </div>
+          <p className="text-xs text-zinc-500 font-medium">
+            Switch between roles to immediately test RBAC capabilities (Admin assignment, Supervisor review & conflict resolution, Technician field inspection).
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+            {(['CUSTOMER', 'ADMIN', 'SUPERVISOR', 'TECHNICIAN'] as const).map((r) => {
+              const isActive = (user?.role ?? 'TECHNICIAN') === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => void useAuthStore.getState().switchRole(r)}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                    isActive
+                      ? r === 'CUSTOMER'
+                        ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                        : r === 'ADMIN'
+                        ? 'bg-orange-600 text-white border-orange-700 shadow-xs'
+                        : r === 'SUPERVISOR'
+                        ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                        : 'bg-sky-600 text-white border-sky-700 shadow-xs'
+                      : 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200 shadow-2xs'
+                  }`}
+                  id={`btn-profile-switch-${r.toLowerCase()}`}
+                >
+                  {isActive && '✓ '}
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Logout Action */}
         <div className="pt-2 border-t border-zinc-100 space-y-4">
           <button

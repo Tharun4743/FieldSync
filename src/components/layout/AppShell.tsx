@@ -135,10 +135,6 @@ function StatusBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           </select>
         </div>
 
-        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 font-medium hidden lg:inline-block">
-          Schema v3
-        </span>
-
         {user && (
           <button
             onClick={() => void handleLogout()}
@@ -161,18 +157,38 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { t } = useI18n();
   const navigate = useNavigate();
 
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERVISOR';
+  const role = user?.role ?? 'TECHNICIAN';
+  const isAdminRole = role === 'ADMIN';
+  const isCustomer = role === 'CUSTOMER';
+  const isSupervisor = role === 'SUPERVISOR';
 
   async function handleLogout() {
     await signOut();
     navigate('/login');
   }
 
+  // Role-tailored navigation items per Section 26 of specification
   const navItems = [
     { to: '/', label: t.dashboard, icon: LayoutDashboard, exact: true },
-    { to: '/inspections', label: t.inspections, icon: ClipboardList },
-    { to: '/conflicts', label: t.conflicts, icon: AlertTriangle },
-    { to: '/sync', label: t.sync, icon: RefreshCw },
+    {
+      to: '/inspections',
+      label: isCustomer
+        ? 'My Issues'
+        : isSupervisor
+        ? 'Assigned Issues'
+        : isAdminRole
+        ? 'All Issues'
+        : 'My Work',
+      icon: ClipboardList,
+    },
+    // Only Supervisors and Admins handle CRDT business conflicts
+    ...(!isCustomer && (isSupervisor || isAdminRole)
+      ? [{ to: '/conflicts', label: t.conflicts, icon: AlertTriangle }]
+      : []),
+    // Field staff & management access sync status
+    ...(!isCustomer
+      ? [{ to: '/sync', label: t.sync, icon: RefreshCw }]
+      : []),
     { to: '/profile', label: t.profile, icon: User },
   ];
 
@@ -188,7 +204,9 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
           />
           <div>
             <p className="font-black text-zinc-900 text-base tracking-tight leading-tight">FieldSync</p>
-            <p className="text-[11px] font-medium text-zinc-500">Offline Field Inspection</p>
+            <p className="text-[11px] font-medium text-zinc-500">
+              {isCustomer ? 'Customer Portal' : 'Field Operations'}
+            </p>
           </div>
         </div>
       </div>
@@ -233,18 +251,18 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
           );
         })}
 
-        {isAdmin && (
+        {isAdminRole && (
           <NavLink
             to="/admin"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-150 ${
                 isActive
-                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-xs'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200/80 shadow-xs'
                   : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100/80'
               }`
             }
           >
-            <Shield size={18} className="shrink-0" />
+            <Shield size={18} className="shrink-0 text-orange-500" />
             <span>{t.admin}</span>
           </NavLink>
         )}
@@ -254,12 +272,28 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
       {user && (
         <div className="p-3 border-t border-zinc-100 space-y-2">
           <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/70 flex items-center gap-2.5 shadow-2xs">
-            <div className="w-8 h-8 bg-indigo-100 border border-indigo-200 rounded-lg flex items-center justify-center text-xs font-bold text-indigo-700 shrink-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 border ${
+              user.role === 'CUSTOMER'
+                ? 'bg-amber-100 border-amber-300 text-amber-800'
+                : user.role === 'ADMIN'
+                ? 'bg-orange-100 border-orange-200 text-orange-700'
+                : user.role === 'SUPERVISOR'
+                ? 'bg-purple-100 border-purple-200 text-purple-700'
+                : 'bg-sky-100 border-sky-200 text-sky-700'
+            }`}>
               {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-zinc-900 truncate">{user.fullName}</p>
-              <p className="text-[10px] text-zinc-500 truncate font-semibold uppercase tracking-wider">{user.role}</p>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${
+                user.role === 'CUSTOMER'
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : user.role === 'ADMIN'
+                  ? 'bg-orange-50 text-orange-700 border-orange-200'
+                  : user.role === 'SUPERVISOR'
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-sky-50 text-sky-700 border-sky-200'
+              }`}>{user.role}</span>
             </div>
           </div>
 
@@ -279,9 +313,14 @@ function SideNav({ onOpenSearch }: { onOpenSearch: () => void }) {
 
 function BottomNav() {
   const { conflictCount } = useSyncStore();
-  const { signOut } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   const { t } = useI18n();
   const navigate = useNavigate();
+
+  const role = user?.role ?? 'TECHNICIAN';
+  const isAdminRole = role === 'ADMIN';
+  const isCustomer = role === 'CUSTOMER';
+  const isSupervisor = role === 'SUPERVISOR';
 
   async function handleLogout() {
     await signOut();
@@ -290,9 +329,24 @@ function BottomNav() {
 
   const navItems = [
     { to: '/', label: t.dashboard, icon: LayoutDashboard, exact: true },
-    { to: '/inspections', label: t.inspections, icon: ClipboardList },
-    { to: '/conflicts', label: t.conflicts, icon: AlertTriangle },
-    { to: '/sync', label: t.sync, icon: RefreshCw },
+    {
+      to: '/inspections',
+      label: isCustomer
+        ? 'Issues'
+        : isSupervisor
+        ? 'Assigned'
+        : isAdminRole
+        ? 'All Issues'
+        : 'My Work',
+      icon: ClipboardList,
+    },
+    ...(!isCustomer && (isSupervisor || isAdminRole)
+      ? [{ to: '/conflicts', label: t.conflicts, icon: AlertTriangle }]
+      : []),
+    ...(!isCustomer
+      ? [{ to: '/sync', label: t.sync, icon: RefreshCw }]
+      : []),
+    { to: '/profile', label: t.profile, icon: User },
   ];
 
   return (
@@ -306,7 +360,7 @@ function BottomNav() {
               to={item.to}
               end={item.exact}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-colors relative ${
+                `flex flex-col items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors relative ${
                   isActive ? 'text-indigo-600 font-bold' : 'text-zinc-500 font-medium'
                 }`
               }
@@ -320,9 +374,23 @@ function BottomNav() {
           );
         })}
 
+        {isAdminRole && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors relative ${
+                isActive ? 'text-orange-600 font-bold' : 'text-zinc-500 font-medium'
+              }`
+            }
+          >
+            <Shield size={18} className="text-orange-500" />
+            <span className="text-[10px] font-bold">Admin</span>
+          </NavLink>
+        )}
+
         <button
           onClick={() => void handleLogout()}
-          className="flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-colors text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
+          className="flex flex-col items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
           id="btn-bottomnav-logout"
         >
           <LogOut size={18} />

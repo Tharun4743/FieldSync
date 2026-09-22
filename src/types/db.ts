@@ -2,7 +2,16 @@
 // FieldSync — Local Database Types (Dexie / IndexedDB)
 // ============================================================
 
-export type UserRole = 'TECHNICIAN' | 'SUPERVISOR' | 'ADMIN';
+export type UserRole = 'CUSTOMER' | 'TECHNICIAN' | 'SUPERVISOR' | 'ADMIN';
+
+export type ServiceCategory =
+  | 'NETWORK'
+  | 'IT_HARDWARE'
+  | 'CCTV_SECURITY'
+  | 'ELECTRICAL'
+  | 'IOT_SYSTEMS'
+  | 'FACILITY_TECH'
+  | 'GENERAL';
 
 export interface UserRecord {
   id: string; // Supabase auth UUID
@@ -22,8 +31,45 @@ export interface DeviceRecord {
   lastSeenAt: string;
 }
 
-export type InspectionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type InspectionStatus =
+  | 'NEW'                    // Customer submitted issue
+  | 'UNDER_REVIEW'           // Admin reviewing / triaging
+  | 'ASSIGNED'               // Admin assigned Supervisor & Technician
+  | 'ACCEPTED'               // Supervisor/Technician acknowledged
+  | 'IN_PROGRESS'            // Technician actively performing field work
+  | 'PENDING_VERIFICATION'   // Technician submitted findings & evidence
+  | 'REWORK_REQUESTED'       // Supervisor requested corrections
+  | 'RESOLVED'               // Supervisor verified, signed off, closed for customer
+  | 'REJECTED'
+  | 'REASSIGNED'
+  | 'ON_HOLD'
+  | 'REOPENED'
+  | 'PENDING'                // Legacy compatibility
+  | 'COMPLETED'              // Legacy compatibility
+  | 'CANCELLED';
+
 export type InspectionPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type IssueStatus =
+  | 'NEW'                    // Customer submitted issue
+  | 'UNDER_REVIEW'           // Admin reviewing / triaging
+  | 'ASSIGNED'               // Admin assigned Supervisor & Technician
+  | 'ACCEPTED'               // Supervisor/Technician acknowledged
+  | 'IN_PROGRESS'            // Technician actively performing field work
+  | 'PENDING_VERIFICATION'   // Technician submitted findings & evidence
+  | 'REWORK_REQUESTED'       // Supervisor requested corrections
+  | 'RESOLVED'               // Supervisor verified, signed off, closed for customer
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export type WorkflowStage =
+  | 'RAISED'                 // Customer filed defect / complaint
+  | 'ASSIGNED'               // Admin assigned Supervisor & Technician(s)
+  | 'COORDINATED'            // Supervisor reviewed, provided instructions & dispatched
+  | 'FIELD_WORK'             // Technician active on site (checklists, photos, notes)
+  | 'AWAITING_VERIFICATION'  // Technician completed work, submitted for supervisor sign-off
+  | 'REWORK_REQUESTED'       // Supervisor requested corrections
+  | 'RESOLVED';              // Supervisor verified, signed off, closed for customer
 
 export interface Inspection {
   id: string;
@@ -32,7 +78,27 @@ export interface Inspection {
   assetId: string;
   status: InspectionStatus;
   priority: InspectionPriority; // added in schema v2
-  assignedTo: string[]; // user IDs
+  category?: ServiceCategory; // generic service category
+  issueStatus?: IssueStatus; // formal issue lifecycle state
+  workflowStage?: WorkflowStage; // customer to resolution lifecycle
+  assignedTo: string[]; // user IDs of technicians
+  supervisorId?: string; // user ID of assigned supervisor
+  supervisorName?: string;
+  supervisorNotes?: string; // coordination guidance & instructions from supervisor
+  supervisedAt?: string; // timestamp when supervisor coordinated/dispatched
+  reportedBy?: string; // customer / reporter name or contact
+  customerId?: string; // customer user ID if logged in
+  customerPhone?: string;
+  customerEmail?: string;
+  customerNotes?: string; // raw issue description from customer
+  customerPhotoUrls?: string[];
+  customerVoiceNoteId?: string;
+  technicianCompletedAt?: string; // when technician finished field work
+  reworkReason?: string; // supervisor rework feedback
+  verifiedBy?: string; // supervisor who verified completion
+  verifiedByName?: string;
+  verifiedAt?: string; // timestamp of supervisor verification
+  resolutionSummary?: string; // final sign-off / resolution notes for customer
   assignedAt: string;
   scheduledDate?: string;
   createdAt: string;
@@ -40,6 +106,16 @@ export interface Inspection {
   serverVersion: number;
   localVersion: number;
   syncStatus: 'SYNCED' | 'PENDING' | 'CONFLICT';
+}
+
+export interface GenericMeasurement {
+  id: string;
+  inspectionId: string;
+  label: string;
+  value: string;
+  unit?: string;
+  timestamp: string;
+  recordedBy: string;
 }
 
 export type AssetType = 'MOTOR' | 'COMPRESSOR' | 'PUMP' | 'GENERATOR' | 'VALVE' | 'OTHER';

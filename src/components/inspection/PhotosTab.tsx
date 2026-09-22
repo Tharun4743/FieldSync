@@ -7,9 +7,10 @@ import { Camera, Upload, Pause, AlertCircle, Loader2, Image } from 'lucide-react
 interface Props {
   inspectionId: string;
   onCapture: (file: File) => Promise<void>;
+  readOnly?: boolean;
 }
 
-export default function PhotosTab({ inspectionId, onCapture }: Props) {
+export default function PhotosTab({ inspectionId, onCapture, readOnly }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingMediaId, setUploadingMediaId] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -42,36 +43,43 @@ export default function PhotosTab({ inspectionId, onCapture }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Capture / Select */}
-      <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-        <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">Add Inspection Media</label>
-        <div className="flex gap-3">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="h-11 px-5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 disabled:opacity-40 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-indigo-100 flex-1"
-            disabled={capturing}
-            id="btn-capture-photo"
-          >
-            {capturing ? (
-              <><Loader2 size={16} className="animate-spin" /> Saving…</>
-            ) : (
-              <><Camera size={16} /> Take / Select Photo</>
-            )}
-          </button>
+      {/* Capture / Select — hidden in readOnly mode */}
+      {!readOnly ? (
+        <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">Add Inspection Media</label>
+          <div className="flex gap-3">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="h-11 px-5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 disabled:opacity-40 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-indigo-100 flex-1"
+              disabled={capturing}
+              id="btn-capture-photo"
+            >
+              {capturing ? (
+                <><Loader2 size={16} className="animate-spin" /> Saving…</>
+              ) : (
+                <><Camera size={16} /> Take / Select Photo</>
+              )}
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileSelect}
+            id="photo-file-input"
+          />
+          <p className="text-[11px] font-medium text-zinc-400">
+            Photos cached locally in IndexedDB immediately · chunked resumable upload to Cloudinary when online
+          </p>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleFileSelect}
-          id="photo-file-input"
-        />
-        <p className="text-[11px] font-medium text-zinc-400">
-          Photos cached locally in IndexedDB immediately · chunked resumable upload to Cloudinary when online
-        </p>
-      </div>
+      ) : (
+        <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center gap-2.5 font-medium">
+          <span className="text-base">👁</span>
+          <span>Reviewer Mode — photo gallery is read-only. You cannot capture new photos for this inspection.</span>
+        </div>
+      )}
 
       {/* Photo grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5">

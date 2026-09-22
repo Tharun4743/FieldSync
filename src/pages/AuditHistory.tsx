@@ -18,7 +18,8 @@ import {
 import type { AuditEvent, Inspection } from '@/types/db';
 
 export default function AuditHistory() {
-  const { inspectionId: routeInspectionId } = useParams<{ inspectionId?: string }>();
+  // Route is /inspections/:id/history — param is 'id', not 'inspectionId'
+  const { id: routeInspectionId } = useParams<{ id?: string }>();
   const [selectedAction, setSelectedAction] = useState<string>('ALL');
 
   const auditEvents = useLiveQuery(

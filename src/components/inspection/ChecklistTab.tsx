@@ -12,9 +12,10 @@ interface Props {
   results: Record<string, InspectionResultRecord>;
   onUpdate: (item: ChecklistItemRecord, value: string) => Promise<void>;
   filterType?: 'NUMERIC' | 'other';
+  readOnly?: boolean;
 }
 
-export default function ChecklistTab({ items, results, onUpdate, filterType }: Props) {
+export default function ChecklistTab({ items, results, onUpdate, filterType, readOnly }: Props) {
   const displayItems = filterType === 'NUMERIC'
     ? items.filter(i => i.type === 'NUMERIC')
     : filterType === 'other'
@@ -37,6 +38,7 @@ export default function ChecklistTab({ items, results, onUpdate, filterType }: P
           item={item}
           result={results[item.id]}
           onUpdate={(value) => onUpdate(item, value)}
+          readOnly={readOnly}
         />
       ))}
     </div>
@@ -47,10 +49,12 @@ function ChecklistItemCard({
   item,
   result,
   onUpdate,
+  readOnly,
 }: {
   item: ChecklistItemRecord;
   result?: InspectionResultRecord;
   onUpdate: (value: string) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const { user } = useAuthStore();
   const { language, t } = useLanguageStore();
@@ -118,44 +122,53 @@ function ChecklistItemCard({
         )}
       </div>
 
-      <ChecklistInput item={item} value={value} onChange={onUpdate} />
+      <ChecklistInput item={item} value={value} onChange={onUpdate} readOnly={readOnly} />
 
-      {/* Item Attachments Bar: Voice Note & Photo */}
-      <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-            className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer"
-          >
-            <Mic size={12} className="text-indigo-600" />
-            {t('term.voiceNote')}
-          </button>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={capturingPhoto}
-            className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer disabled:opacity-50"
-          >
-            <Camera size={12} className="text-indigo-600" />
-            {capturingPhoto ? 'Saving...' : t('term.photo')}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => void handlePhotoCapture(e)}
-          />
+      {/* Item Attachments Bar: Voice Note & Photo — hidden in readOnly mode */}
+      {!readOnly && (
+        <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+              className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer"
+            >
+              <Mic size={12} className="text-indigo-600" />
+              {t('term.voiceNote')}
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={capturingPhoto}
+              className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer disabled:opacity-50"
+            >
+              <Camera size={12} className="text-indigo-600" />
+              {capturingPhoto ? 'Saving...' : t('term.photo')}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => void handlePhotoCapture(e)}
+            />
+          </div>
+
+          {result && (
+            <p className="text-[11px] font-medium text-zinc-400">
+              Last updated: {new Date(result.updatedAt).toLocaleTimeString()}
+            </p>
+          )}
         </div>
-
-        {result && (
+      )}
+      {readOnly && result && (
+        <div className="pt-1 border-t border-zinc-100">
           <p className="text-[11px] font-medium text-zinc-400">
             Last updated: {new Date(result.updatedAt).toLocaleTimeString()}
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {showVoiceRecorder && (
         <div className="pt-2">
@@ -175,18 +188,21 @@ function ChecklistInput({
   item,
   value,
   onChange,
+  readOnly,
 }: {
   item: ChecklistItemRecord;
   value: string;
   onChange: (value: string) => Promise<void>;
+  readOnly?: boolean;
 }) {
   switch (item.type) {
     case 'PASS_FAIL':
       return (
         <div className="flex gap-2">
           <button
-            onClick={() => onChange('PASS')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('PASS')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'PASS'
                 ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -196,8 +212,9 @@ function ChecklistInput({
             <CheckCircle2 size={16} /> PASS
           </button>
           <button
-            onClick={() => onChange('FAIL')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('FAIL')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'FAIL'
                 ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -213,8 +230,9 @@ function ChecklistInput({
       return (
         <div className="flex gap-2">
           <button
-            onClick={() => onChange('GOOD')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('GOOD')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'GOOD'
                 ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -224,8 +242,9 @@ function ChecklistInput({
             <CheckCircle2 size={16} /> GOOD
           </button>
           <button
-            onClick={() => onChange('DAMAGED')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('DAMAGED')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'DAMAGED'
                 ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -241,8 +260,9 @@ function ChecklistInput({
       return (
         <div className="flex gap-2">
           <button
-            onClick={() => onChange('YES')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('YES')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'YES'
                 ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -252,8 +272,9 @@ function ChecklistInput({
             YES
           </button>
           <button
-            onClick={() => onChange('NO')}
-            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            onClick={() => !readOnly && onChange('NO')}
+            disabled={readOnly}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} ${
               value === 'NO'
                 ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
                 : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
@@ -270,10 +291,12 @@ function ChecklistInput({
         <div className="flex gap-2 items-center">
           <input
             type="number"
-            className="flex-1 h-10 px-3.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+            readOnly={readOnly}
+            disabled={readOnly}
+            className={`flex-1 h-10 px-3.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all ${readOnly ? 'opacity-70 cursor-not-allowed bg-zinc-50' : ''}`}
             placeholder={item.unit ? `Enter value (${item.unit})` : 'Enter value'}
             defaultValue={value}
-            onBlur={e => { if (e.target.value !== value) onChange(e.target.value); }}
+            onBlur={e => { if (!readOnly && e.target.value !== value) onChange(e.target.value); }}
             min={item.minValue}
             max={item.maxValue}
             id={`result-numeric-${item.id}`}
@@ -288,9 +311,10 @@ function ChecklistInput({
       return (
         <div className="relative">
           <select
-            className="w-full h-10 px-3.5 pr-10 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+            className={`w-full h-10 px-3.5 pr-10 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 appearance-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all ${readOnly ? 'opacity-70 cursor-not-allowed bg-zinc-50' : 'cursor-pointer'}`}
             value={value}
-            onChange={e => onChange(e.target.value)}
+            disabled={readOnly}
+            onChange={e => !readOnly && onChange(e.target.value)}
             id={`result-select-${item.id}`}
           >
             <option value="">Select an option…</option>
@@ -306,13 +330,16 @@ function ChecklistInput({
     default:
       return (
         <textarea
-          className="w-full p-3 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+          readOnly={readOnly}
+          disabled={readOnly}
+          className={`w-full p-3 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all ${readOnly ? 'opacity-70 cursor-not-allowed bg-zinc-50' : ''}`}
           rows={3}
           placeholder="Enter observation notes…"
           defaultValue={value}
-          onBlur={e => { if (e.target.value !== value) onChange(e.target.value); }}
+          onBlur={e => { if (!readOnly && e.target.value !== value) onChange(e.target.value); }}
           id={`result-text-${item.id}`}
         />
       );
   }
 }
+

@@ -38,7 +38,7 @@ export default function SyncCenter() {
   const allMedia = useLiveQuery(() => db.media.toArray(), []);
   const allVoiceNotes = useLiveQuery(() => db.voiceNotes.toArray(), []);
   const openConflictsCount = useLiveQuery(
-    () => db.conflicts.where('status').equals('PENDING').count(),
+    () => db.conflicts.where('status').equals('OPEN').count(),
     []
   );
   const logicalClockVal = useLiveQuery(() => db.syncState.toCollection().first(), []);

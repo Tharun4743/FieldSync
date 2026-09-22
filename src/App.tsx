@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSyncStore } from '@/stores/syncStore';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
 import AppShell from '@/components/layout/AppShell';
+import RequireRole from '@/components/auth/RequireRole';
 import LoginPage from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import InspectionList from '@/pages/InspectionList';
@@ -63,7 +64,11 @@ export default function App() {
             <Route path="inspections/:id/history" element={<AuditHistory />} />
             <Route path="conflicts" element={<ConflictCenter />} />
             <Route path="sync" element={<SyncCenter />} />
-            <Route path="admin" element={<AdminPanel />} />
+            <Route path="admin" element={
+              <RequireRole roles={['ADMIN']}>
+                <AdminPanel />
+              </RequireRole>
+            } />
             <Route path="profile" element={<Profile />} />
           </Route>
         </Routes>

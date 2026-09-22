@@ -7,9 +7,10 @@ import { Send, User } from 'lucide-react';
 interface Props {
   inspectionId: string;
   onSubmit: (content: string) => Promise<void>;
+  readOnly?: boolean;
 }
 
-export default function NotesTab({ inspectionId, onSubmit }: Props) {
+export default function NotesTab({ inspectionId, onSubmit, readOnly }: Props) {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { user } = useAuthStore();
@@ -39,32 +40,39 @@ export default function NotesTab({ inspectionId, onSubmit }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Note compose */}
-      <form onSubmit={handleSubmit} className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-        <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">Add Inspector Note</label>
-        <textarea
-          className="w-full p-3 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-          rows={3}
-          placeholder="Describe your equipment observation or anomaly…"
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          id="note-input"
-        />
-        <div className="flex items-center justify-between pt-1">
-          <p className="text-[11px] font-medium text-zinc-400">
-            Committed to IndexedDB immediately · replicated via CRDT
-          </p>
-          <button
-            type="submit"
-            className="h-9 px-4 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-indigo-100"
-            disabled={!content.trim() || submitting}
-            id="btn-add-note"
-          >
-            <Send size={13} />
-            {submitting ? 'Saving…' : 'Add Note'}
-          </button>
+      {/* Note compose — hidden in readOnly mode */}
+      {!readOnly ? (
+        <form onSubmit={handleSubmit} className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 block">Add Inspector Note</label>
+          <textarea
+            className="w-full p-3 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+            rows={3}
+            placeholder="Describe your equipment observation or anomaly…"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            id="note-input"
+          />
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-[11px] font-medium text-zinc-400">
+              Committed to IndexedDB immediately · replicated via CRDT
+            </p>
+            <button
+              type="submit"
+              className="h-9 px-4 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-indigo-100"
+              disabled={!content.trim() || submitting}
+              id="btn-add-note"
+            >
+              <Send size={13} />
+              {submitting ? 'Saving…' : 'Add Note'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center gap-2.5 font-medium">
+          <span className="text-base">👁</span>
+          <span>Reviewer Mode — notes are read-only. You cannot add notes to this inspection.</span>
         </div>
-      </form>
+      )}
 
       {/* Notes list */}
       <div className="space-y-3">

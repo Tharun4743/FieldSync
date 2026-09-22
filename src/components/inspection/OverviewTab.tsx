@@ -1,5 +1,6 @@
 import type { InspectionRecord, AssetRecord, InspectionResultRecord, ChecklistItemRecord } from '../../types/db.types';
 import { MapPin, Calendar, Tag, BarChart3 } from 'lucide-react';
+import ResolutionCertificate from './ResolutionCertificate';
 
 interface Props {
   inspection: InspectionRecord;
@@ -36,6 +37,51 @@ export default function OverviewTab({ inspection, asset, results, checklistItems
           {completedItems !== completedRequired && ` · ${completedItems} total answered`}
         </p>
       </div>
+
+      {/* Resolution Certificate (if resolved) */}
+      {(inspection.workflowStage === 'RESOLVED' || inspection.status === 'COMPLETED') && (
+        <ResolutionCertificate inspection={inspection} asset={asset} />
+      )}
+
+      {/* Customer Issue Details */}
+      {(inspection.reportedBy || inspection.customerNotes) && (
+        <div className="bg-white border border-amber-200/90 rounded-2xl p-5 shadow-xs bg-gradient-to-r from-amber-50/40 via-white to-transparent">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+              Customer Complaint
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">
+              Reported by <strong className="text-zinc-900">{inspection.reportedBy || 'Customer'}</strong>
+            </span>
+          </div>
+          {inspection.customerNotes && (
+            <p className="text-xs text-zinc-700 bg-white p-3 rounded-xl border border-zinc-200/80 font-medium leading-relaxed">
+              "{inspection.customerNotes}"
+            </p>
+          )}
+          <div className="flex items-center gap-4 mt-2 text-[11px] text-zinc-500 font-mono">
+            {inspection.customerPhone && <span>Phone: {inspection.customerPhone}</span>}
+            {inspection.customerEmail && <span>Email: {inspection.customerEmail}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Supervisor Coordination Instructions */}
+      {inspection.supervisorNotes && (
+        <div className="bg-white border border-purple-200 rounded-2xl p-5 shadow-xs bg-gradient-to-r from-purple-50/40 via-white to-transparent">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
+              Supervisor Directives
+            </span>
+            <span className="text-xs text-zinc-500 font-medium">
+              Coordinated by <strong className="text-zinc-900">{inspection.supervisorName || 'Supervisor'}</strong>
+            </span>
+          </div>
+          <p className="text-xs text-zinc-700 bg-white p-3 rounded-xl border border-zinc-200/80 font-medium leading-relaxed">
+            "{inspection.supervisorNotes}"
+          </p>
+        </div>
+      )}
 
       {/* Inspection details */}
       <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm flex flex-col gap-4">

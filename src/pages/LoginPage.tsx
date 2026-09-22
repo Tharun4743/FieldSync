@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../lib/db/database';
 import { useAuthStore } from '../stores/authStore';
 
 export default function LoginPage() {
@@ -9,6 +11,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuthStore();
   const navigate = useNavigate();
+
+  // Load registered users strictly from the local/cloud database (no constant names)
+  const dbUsers = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const quickUser = dbUsers.find(u => u.role === 'TECHNICIAN') || dbUsers[0];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,59 +142,60 @@ export default function LoginPage() {
                 {loading ? 'Signing In...' : 'Sign In'}
               </button>
 
-              {/* Predefined Role Fast Login Banner */}
-              <div className="pt-3 mt-3 border-t border-zinc-100">
-                <button
-                  type="button"
-                  onClick={() => fillRole('elakkiya@gmail.com')}
-                  className="w-full text-left p-2.5 sm:p-3 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-pink-50/30 hover:from-indigo-100/80 hover:to-purple-100/60 border border-indigo-200/80 hover:border-indigo-400 rounded-2xl transition-all duration-200 cursor-pointer group shadow-sm flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-indigo-200/80 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 group-hover:border-indigo-300 transition-all">
-                      ⚡
+              {/* Predefined Role Fast Login Banner (dynamic from database) */}
+              {quickUser && (
+                <div className="pt-3 mt-3 border-t border-zinc-100">
+                  <button
+                    type="button"
+                    onClick={() => fillRole(quickUser.email)}
+                    className="w-full text-left p-2.5 sm:p-3 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-pink-50/30 hover:from-indigo-100/80 hover:to-purple-100/60 border border-indigo-200/80 hover:border-indigo-400 rounded-2xl transition-all duration-200 cursor-pointer group shadow-sm flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-indigo-200/80 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 group-hover:border-indigo-300 transition-all">
+                        ⚡
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">
+                          {quickUser.fullName} ({quickUser.role})
+                        </p>
+                        <p className="text-[11px] text-zinc-500 font-medium truncate">
+                          {quickUser.email} · pass: 123456
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">
-                        Field Technician (Elakkiya)
-                      </p>
-                      <p className="text-[11px] text-zinc-500 font-medium truncate">
-                        elakkiya@gmail.com · pass: 123456
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 px-2 py-1 bg-white group-hover:bg-indigo-600 group-hover:text-white text-indigo-600 text-xs font-bold rounded-lg border border-indigo-200 group-hover:border-indigo-600 shadow-sm transition-all flex items-center gap-0.5">
-                    Select →
-                  </span>
-                </button>
-              </div>
+                    <span className="shrink-0 px-2 py-1 bg-white group-hover:bg-indigo-600 group-hover:text-white text-indigo-600 text-xs font-bold rounded-lg border border-indigo-200 group-hover:border-indigo-600 shadow-sm transition-all flex items-center gap-0.5">
+                      Select →
+                    </span>
+                  </button>
+                </div>
+              )}
 
-              {/* Role Fast Pickers */}
-              <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-zinc-500">
-                <span>Fast login:</span>
-                <button
-                  type="button"
-                  onClick={() => fillRole('tharun@gmail.com')}
-                  className="text-indigo-600 hover:underline font-semibold"
-                >
-                  Tharun (Admin)
-                </button>
-                <span>·</span>
-                <button
-                  type="button"
-                  onClick={() => fillRole('abi@gmail.com')}
-                  className="text-indigo-600 hover:underline font-semibold"
-                >
-                  Abi (Supervisor)
-                </button>
-                <span>·</span>
-                <button
-                  type="button"
-                  onClick={() => fillRole('elakkiya@gmail.com')}
-                  className="text-indigo-600 hover:underline font-semibold"
-                >
-                  Elakkiya (Technician)
-                </button>
-              </div>
+              {/* Role Fast Pickers (dynamic from database) */}
+              {dbUsers.length > 0 && (
+                <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-zinc-500 flex-wrap">
+                  <span>Fast login:</span>
+                  {dbUsers.map((u, idx) => (
+                    <React.Fragment key={u.id}>
+                      {idx > 0 && <span>·</span>}
+                      <button
+                        type="button"
+                        onClick={() => fillRole(u.email)}
+                        className={`font-semibold hover:underline cursor-pointer ${
+                          u.role === 'ADMIN'
+                            ? 'text-orange-600'
+                            : u.role === 'SUPERVISOR'
+                            ? 'text-purple-600'
+                            : u.role === 'CUSTOMER'
+                            ? 'text-amber-600'
+                            : 'text-sky-600'
+                        }`}
+                      >
+                        {u.fullName} ({u.role})
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
             </form>
           </div>
         </div>

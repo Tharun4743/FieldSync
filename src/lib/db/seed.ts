@@ -1,86 +1,201 @@
 import { db } from './schema';
-import type { Inspection, ChecklistItem, Asset } from '@/types/db';
+import type { Inspection, ChecklistItem, Asset, UserRecord } from '@/types/db';
 import { v4 as uuidv4 } from 'uuid';
 
 // ============================================================
-// Realistic Industrial Seed Data
-//
-// Sites: Factory A (Harrington Industrial), Factory B (Meridian Processing Plant)
-// Assets: Motor M-101, M-102, Compressor C-201, Pump P-301, Generator G-101
+// FieldSync — Generic Field Service Seed Data
+// Roles: Customer -> Admin -> Supervisor -> Technician
+// Categories: Network, IT Hardware, CCTV/Security, Electrical, IoT
 // ============================================================
 
 export const REAL_USER_IDS = {
-  ADMIN: '1d7e28ec-e29e-4f29-958e-b2f2be940063',
-  SUPERVISOR: 'c7ae2610-6be0-46d3-871a-d3690abe3f16',
-  TECHNICIAN: 'fc260600-d20d-46e8-8815-d6f9b5c1e927',
+  ADMIN: '00000000-0000-0000-0000-000000000001',
+  SUPERVISOR: '00000000-0000-0000-0000-000000000002',
+  TECHNICIAN: '00000000-0000-0000-0000-000000000003',
+  CUSTOMER: '00000000-0000-0000-0000-000000000004',
+  TECHNICIAN_2: '00000000-0000-0000-0000-000000000005',
 };
 
+export const DEFAULT_USERS: UserRecord[] = [
+  {
+    id: REAL_USER_IDS.ADMIN,
+    email: 'tharun@gmail.com',
+    fullName: 'Tharun Erodde',
+    role: 'ADMIN',
+    createdAt: '2025-01-15T08:00:00Z',
+    updatedAt: '2025-01-15T08:00:00Z',
+  },
+  {
+    id: REAL_USER_IDS.SUPERVISOR,
+    email: 'abi@gmail.com',
+    fullName: 'Abi Kumar',
+    role: 'SUPERVISOR',
+    createdAt: '2025-01-15T08:00:00Z',
+    updatedAt: '2025-01-15T08:00:00Z',
+  },
+  {
+    id: REAL_USER_IDS.TECHNICIAN,
+    email: 'elakkiya@gmail.com',
+    fullName: 'Elakkiya S',
+    role: 'TECHNICIAN',
+    createdAt: '2025-01-15T08:00:00Z',
+    updatedAt: '2025-01-15T08:00:00Z',
+  },
+  {
+    id: REAL_USER_IDS.CUSTOMER,
+    email: 'customer@company.com',
+    fullName: 'Bob Abd',
+    role: 'CUSTOMER',
+    createdAt: '2025-01-15T08:00:00Z',
+    updatedAt: '2025-01-15T08:00:00Z',
+  },
+  {
+    id: REAL_USER_IDS.TECHNICIAN_2,
+    email: 'rajesh@fieldsync.io',
+    fullName: 'Rajesh M',
+    role: 'TECHNICIAN',
+    createdAt: '2025-01-15T08:00:00Z',
+    updatedAt: '2025-01-15T08:00:00Z',
+  },
+];
+
+export async function deduplicateUsers(): Promise<void> {
+  const allUsers = await db.users.toArray();
+  const seenEmails = new Map<string, UserRecord>();
+  const toDelete: string[] = [];
+
+  for (const user of allUsers) {
+    const emailKey = user.email.toLowerCase().trim();
+    if (!seenEmails.has(emailKey)) {
+      seenEmails.set(emailKey, user);
+    } else {
+      const existing = seenEmails.get(emailKey)!;
+      if (user.fullName && !user.fullName.includes('(') && existing.fullName?.includes('(')) {
+        toDelete.push(existing.id);
+        seenEmails.set(emailKey, user);
+      } else {
+        toDelete.push(user.id);
+      }
+    }
+  }
+
+  for (const user of allUsers) {
+    if (user.fullName?.includes('(') && !toDelete.includes(user.id)) {
+      const emailKey = user.email.toLowerCase().trim();
+      const realUser = allUsers.find(u => u.email.toLowerCase().trim() === emailKey && !u.fullName?.includes('('));
+      if (realUser) {
+        toDelete.push(user.id);
+      }
+    }
+  }
+
+  if (toDelete.length > 0) {
+    await db.users.bulkDelete(toDelete);
+    console.info(`[Seed] Deduplicated and removed ${toDelete.length} redundant user records.`);
+  }
+}
+
+export async function ensureDefaultUsers(): Promise<void> {
+  await deduplicateUsers();
+
+  for (const u of DEFAULT_USERS) {
+    const existing = await db.users.where('email').equalsIgnoreCase(u.email.trim()).first();
+    if (!existing) {
+      await db.users.put(u);
+    } else if (existing.fullName !== u.fullName || existing.role !== u.role) {
+      await db.users.update(existing.id, { fullName: u.fullName, role: u.role });
+    }
+  }
+
+  // Migrate any previous 'Alex Morgan' records to 'Bob Abd' in local IndexedDB (use in-memory filter since fullName/reportedBy are not indexed)
+  const currentUsers = await db.users.toArray();
+  const previousAlex = currentUsers.filter(u => u.fullName && u.fullName.toLowerCase() === 'alex morgan');
+  for (const u of previousAlex) {
+    await db.users.update(u.id, { fullName: 'Bob Abd' });
+  }
+
+  const currentInspections = await db.inspections.toArray();
+  const alexInspections = currentInspections.filter(i => i.reportedBy && i.reportedBy.toLowerCase() === 'alex morgan');
+  for (const insp of alexInspections) {
+    await db.inspections.update(insp.id, { reportedBy: 'Bob Abd' });
+  }
+}
+
 export async function seedLocalDatabase(
-  userId = REAL_USER_IDS.TECHNICIAN,
-  userName = 'Field Technician'
+  _userId?: string,
+  _userName?: string,
+  force = false
 ): Promise<void> {
+  await ensureDefaultUsers();
+
   const existingInspections = await db.inspections.count();
-  if (existingInspections > 0) {
-    console.info('[Seed] Local database already seeded, skipping.', userName);
+  if (existingInspections > 0 && !force) {
+    console.info('[Seed] Local database already seeded, skipping.');
     return;
   }
 
-  console.info('[Seed] Seeding local database with industrial data...');
+  if (force) {
+    await db.inspections.clear();
+    await db.checklistItems.clear();
+    console.info('[Seed] Resetting service issues and checklist items for fresh generic seed...');
+  }
 
-  // ── Assets ────────────────────────────────────────────────
+  console.info('[Seed] Seeding local database with generic field service tickets...');
+
+  // ── Generic Assets (Network, IT, Security, Electrical, IoT) ─────────────────
   const assets: Asset[] = [
     {
       id: 'a1000000-0000-0000-0000-000000000001',
-      name: 'Motor M-101',
-      assetCode: 'MTR-M101',
-      location: 'Factory A — Line 1, Bay 3',
-      type: 'MOTOR',
-      manufacturer: 'Siemens',
-      model: 'SIMOTICS SD',
+      name: 'Wireless AP-204',
+      assetCode: 'NET-AP204',
+      location: 'Second Floor — Laboratory 2',
+      type: 'OTHER',
+      manufacturer: 'UniFi',
+      model: 'U6-Enterprise',
       createdAt: '2025-01-15T08:00:00Z',
       updatedAt: '2025-01-15T08:00:00Z',
     },
     {
       id: 'a1000000-0000-0000-0000-000000000002',
-      name: 'Motor M-102',
-      assetCode: 'MTR-M102',
-      location: 'Factory A — Line 1, Bay 4',
-      type: 'MOTOR',
-      manufacturer: 'Siemens',
-      model: 'SIMOTICS SD',
+      name: 'PTZ Security Camera CAM-04',
+      assetCode: 'SEC-CAM04',
+      location: 'North Perimeter — East Parking Entry',
+      type: 'OTHER',
+      manufacturer: 'Axis Communications',
+      model: 'Q6135-LE',
       createdAt: '2025-01-15T08:00:00Z',
       updatedAt: '2025-01-15T08:00:00Z',
     },
     {
       id: 'a1000000-0000-0000-0000-000000000003',
-      name: 'Compressor C-201',
-      assetCode: 'CMP-C201',
-      location: 'Factory A — Utility Room 2',
-      type: 'COMPRESSOR',
-      manufacturer: 'Atlas Copco',
-      model: 'GA110',
+      name: 'Modular UPS Unit 3000VA',
+      assetCode: 'PWR-UPS01',
+      location: 'Main Facility — Server Room B',
+      type: 'OTHER',
+      manufacturer: 'APC Schneider',
+      model: 'Smart-UPS RT 3000',
       createdAt: '2025-01-15T08:00:00Z',
       updatedAt: '2025-01-15T08:00:00Z',
     },
     {
       id: 'a1000000-0000-0000-0000-000000000004',
-      name: 'Pump P-301',
-      assetCode: 'PMP-P301',
-      location: 'Factory B — Process Area 1',
-      type: 'PUMP',
-      manufacturer: 'Grundfos',
-      model: 'CR 45',
+      name: 'RFID Badge Reader R-12',
+      assetCode: 'ACC-R12',
+      location: 'Administration Wing A — Main Portal',
+      type: 'OTHER',
+      manufacturer: 'HID Global',
+      model: 'Signo 40',
       createdAt: '2025-01-15T08:00:00Z',
       updatedAt: '2025-01-15T08:00:00Z',
     },
     {
       id: 'a1000000-0000-0000-0000-000000000005',
-      name: 'Generator G-101',
-      assetCode: 'GEN-G101',
-      location: 'Factory B — Generator House',
-      type: 'GENERATOR',
-      manufacturer: 'Caterpillar',
-      model: 'C15',
+      name: 'Environmental IoT Telemetry Gateway',
+      assetCode: 'IOT-GW01',
+      location: 'Logistics Facility — Cold Storage 3',
+      type: 'OTHER',
+      manufacturer: 'Advantech',
+      model: 'WISE-4012',
       createdAt: '2025-01-15T08:00:00Z',
       updatedAt: '2025-01-15T08:00:00Z',
     },
@@ -88,142 +203,253 @@ export async function seedLocalDatabase(
 
   await db.assets.bulkPut(assets);
 
-  // ── Inspections + Checklists ──────────────────────────────
-  const inspections = [
-    {
-      id: 'i1000000-0000-0000-0000-000000000001',
-      title: 'Monthly Preventive Inspection',
-      siteName: 'Harrington Industrial — Factory A',
-      assetId: 'a1000000-0000-0000-0000-000000000001',
-      assetName: 'Motor M-101',
-    },
-    {
-      id: 'i1000000-0000-0000-0000-000000000002',
-      title: 'Quarterly Safety Inspection',
-      siteName: 'Harrington Industrial — Factory A',
-      assetId: 'a1000000-0000-0000-0000-000000000002',
-      assetName: 'Motor M-102',
-    },
-    {
-      id: 'i1000000-0000-0000-0000-000000000003',
-      title: 'Annual Overhaul Inspection',
-      siteName: 'Harrington Industrial — Factory A',
-      assetId: 'a1000000-0000-0000-0000-000000000003',
-      assetName: 'Compressor C-201',
-    },
-    {
-      id: 'i1000000-0000-0000-0000-000000000004',
-      title: 'Routine Condition Check',
-      siteName: 'Meridian Processing Plant — Factory B',
-      assetId: 'a1000000-0000-0000-0000-000000000004',
-      assetName: 'Pump P-301',
-    },
-    {
-      id: 'i1000000-0000-0000-0000-000000000005',
-      title: 'Emergency Shutdown Inspection',
-      siteName: 'Meridian Processing Plant — Factory B',
-      assetId: 'a1000000-0000-0000-0000-000000000005',
-      assetName: 'Generator G-101',
-    },
-  ];
-
+  // ── Customer Service Issues Across the 6 Stages ───────────────────────────
   const now = new Date().toISOString();
+  const pastHour = new Date(Date.now() - 3600 * 1000).toISOString();
+  const past2Hours = new Date(Date.now() - 7200 * 1000).toISOString();
 
-  for (const insp of inspections) {
-    const inspection: Inspection = {
-      id: insp.id,
-      title: insp.title,
-      siteName: insp.siteName,
-      assetId: insp.assetId,
+  const seedIssues: Inspection[] = [
+    {
+      id: 'b1000000-0000-0000-0000-000000000001',
+      title: 'Wi-Fi connection unavailable in second-floor laboratory',
+      siteName: 'Second Floor — Laboratory 2',
+      assetId: 'a1000000-0000-0000-0000-000000000001',
+      category: 'NETWORK',
       status: 'IN_PROGRESS',
-      priority: 'MEDIUM',
-      assignedTo: Array.from(new Set([userId, REAL_USER_IDS.TECHNICIAN, REAL_USER_IDS.SUPERVISOR, REAL_USER_IDS.ADMIN])),
+      issueStatus: 'IN_PROGRESS',
+      priority: 'HIGH',
+      workflowStage: 'FIELD_WORK',
+      reportedBy: 'Bob Abd',
+      customerId: REAL_USER_IDS.CUSTOMER,
+      customerEmail: 'customer@company.com',
+      customerPhone: '+1 (555) 234-8901',
+      customerNotes: 'The laboratory Wi-Fi connection has stopped working. Research workstations cannot authenticate to the laboratory subnet.',
+      supervisorId: REAL_USER_IDS.SUPERVISOR,
+      supervisorName: 'Abi Kumar',
+      supervisorNotes: 'Check PoE switch port 14 output first. Measure downlink RSSI after power cycle and ensure VLAN 20 is tagged.',
+      supervisedAt: pastHour,
+      assignedTo: [REAL_USER_IDS.TECHNICIAN],
+      assignedAt: past2Hours,
+      createdAt: past2Hours,
+      updatedAt: now,
+      serverVersion: 1,
+      localVersion: 1,
+      syncStatus: 'SYNCED',
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000002',
+      title: 'Security camera offline at East Parking Entry',
+      siteName: 'North Perimeter — East Parking Entry',
+      assetId: 'a1000000-0000-0000-0000-000000000002',
+      category: 'CCTV_SECURITY',
+      status: 'IN_PROGRESS',
+      issueStatus: 'PENDING_VERIFICATION',
+      priority: 'CRITICAL',
+      workflowStage: 'AWAITING_VERIFICATION',
+      reportedBy: 'Security Operations Desk',
+      customerEmail: 'security@facility.org',
+      customerPhone: '+1 (555) 901-4432',
+      customerNotes: 'Video feed disconnected at 06:30. NVR shows RTSP handshake timeout on Channel 4.',
+      supervisorId: REAL_USER_IDS.SUPERVISOR,
+      supervisorName: 'Abi Kumar',
+      supervisorNotes: 'Inspect exterior waterproof RJ45 coupling and test with inline PoE tester.',
+      supervisedAt: past2Hours,
+      assignedTo: [REAL_USER_IDS.TECHNICIAN],
+      technicianCompletedAt: now,
+      assignedAt: past2Hours,
+      createdAt: past2Hours,
+      updatedAt: now,
+      serverVersion: 1,
+      localVersion: 1,
+      syncStatus: 'SYNCED',
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000003',
+      title: 'UPS backup battery audible alarm in Server Room B',
+      siteName: 'Main Facility — Server Room B',
+      assetId: 'a1000000-0000-0000-0000-000000000003',
+      category: 'ELECTRICAL',
+      status: 'PENDING',
+      issueStatus: 'NEW',
+      priority: 'HIGH',
+      workflowStage: 'RAISED',
+      reportedBy: 'DevOps Infrastructure Lead',
+      customerEmail: 'devops@company.com',
+      customerPhone: '+1 (555) 782-1199',
+      customerNotes: 'Beeping error code LED #3 indicating internal battery pack impedance fault.',
+      assignedTo: [],
       assignedAt: now,
-      scheduledDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAt: now,
       updatedAt: now,
       serverVersion: 1,
       localVersion: 1,
       syncStatus: 'SYNCED',
-    };
-    await db.inspections.put(inspection);
-  }
-
-  // ── Checklist Items for Motor Inspections ─────────────────
-  const motorChecklistItems: Omit<ChecklistItem, 'id'>[] = [
-    { inspectionId: '', question: 'Motor housing condition', type: 'GOOD_DAMAGED', required: true, order: 1, createdAt: now },
-    { inspectionId: '', question: 'Lubrication status — sufficient grease/oil', type: 'PASS_FAIL', required: true, order: 2, createdAt: now },
-    { inspectionId: '', question: 'Operating temperature (°C)', type: 'NUMERIC', required: true, order: 3, unit: '°C', minValue: 0, maxValue: 120, createdAt: now },
-    { inspectionId: '', question: 'Vibration level', type: 'SELECT', required: true, order: 4, options: ['LOW', 'MODERATE', 'HIGH', 'CRITICAL'], createdAt: now },
-    { inspectionId: '', question: 'Electrical connections secure', type: 'PASS_FAIL', required: true, order: 5, createdAt: now },
-    { inspectionId: '', question: 'Emergency stop functional', type: 'PASS_FAIL', required: true, order: 6, createdAt: now },
-    { inspectionId: '', question: 'Safety guard in place', type: 'PASS_FAIL', required: true, order: 7, createdAt: now },
-    { inspectionId: '', question: 'Noise level abnormal', type: 'BOOLEAN', required: false, order: 8, createdAt: now },
-    { inspectionId: '', question: 'Current draw (A)', type: 'NUMERIC', required: false, order: 9, unit: 'A', minValue: 0, maxValue: 1000, createdAt: now },
-    { inspectionId: '', question: 'Shaft alignment acceptable', type: 'PASS_FAIL', required: true, order: 10, createdAt: now },
-    { inspectionId: '', question: 'Inspector notes', type: 'TEXT', required: false, order: 11, createdAt: now },
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000004',
+      title: 'Card reader not unlocking main portal entrance',
+      siteName: 'Administration Wing A — Main Portal',
+      assetId: 'a1000000-0000-0000-0000-000000000004',
+      category: 'IT_HARDWARE',
+      status: 'PENDING',
+      issueStatus: 'ASSIGNED',
+      priority: 'MEDIUM',
+      workflowStage: 'ASSIGNED',
+      reportedBy: 'Human Resources Front Office',
+      customerEmail: 'hr@company.com',
+      customerNotes: 'Staff badges trigger red blink with no relay activation on the magnetic lock.',
+      supervisorId: REAL_USER_IDS.SUPERVISOR,
+      supervisorName: 'Abi Kumar',
+      assignedTo: [REAL_USER_IDS.TECHNICIAN],
+      assignedAt: now,
+      createdAt: pastHour,
+      updatedAt: now,
+      serverVersion: 1,
+      localVersion: 1,
+      syncStatus: 'SYNCED',
+    },
+    {
+      id: 'b1000000-0000-0000-0000-000000000005',
+      title: 'Telemetry gateway offline in Cold Storage facility',
+      siteName: 'Logistics Facility — Cold Storage 3',
+      assetId: 'a1000000-0000-0000-0000-000000000005',
+      category: 'IOT_SYSTEMS',
+      status: 'COMPLETED',
+      issueStatus: 'RESOLVED',
+      priority: 'MEDIUM',
+      workflowStage: 'RESOLVED',
+      reportedBy: 'Cold Chain Compliance Officer',
+      customerEmail: 'compliance@logistics.com',
+      customerNotes: 'Loss of MQTT heartbeat packets since yesterday afternoon.',
+      supervisorId: REAL_USER_IDS.SUPERVISOR,
+      supervisorName: 'Abi Kumar',
+      supervisorNotes: 'Replace 24V DC auxiliary power adapter and reboot gateway.',
+      assignedTo: [REAL_USER_IDS.TECHNICIAN],
+      technicianCompletedAt: pastHour,
+      verifiedBy: REAL_USER_IDS.SUPERVISOR,
+      verifiedByName: 'Abi Kumar',
+      verifiedAt: now,
+      resolutionSummary: 'Defective 24V DIN-rail power supply replaced. Gateway reconnected to MQTT broker, packet transmission verified with 100% telemetry uptime.',
+      assignedAt: past2Hours,
+      createdAt: past2Hours,
+      updatedAt: now,
+      serverVersion: 1,
+      localVersion: 1,
+      syncStatus: 'SYNCED',
+    },
   ];
 
-  // Add checklist items for Motor M-101 and M-102
-  for (const inspId of [
-    'i1000000-0000-0000-0000-000000000001',
-    'i1000000-0000-0000-0000-000000000002',
-  ]) {
-    for (const item of motorChecklistItems) {
+  for (const issue of seedIssues) {
+    await db.inspections.put(issue);
+  }
+
+  // ── Generic Service Diagnostic Checklist Items ───────────────────────────
+  const genericChecklistQuestions: Omit<ChecklistItem, 'id'>[] = [
+    { inspectionId: '', question: 'Visual condition of device, mountings, and enclosures', type: 'GOOD_DAMAGED', required: true, order: 1, createdAt: now },
+    { inspectionId: '', question: 'Power supply voltage & LED indicator status verified', type: 'PASS_FAIL', required: true, order: 2, createdAt: now },
+    { inspectionId: '', question: 'Physical cabling and connector integrity secure', type: 'PASS_FAIL', required: true, order: 3, createdAt: now },
+    { inspectionId: '', question: 'Key signal / operating measurement recorded', type: 'NUMERIC', required: false, order: 4, unit: 'dBm / V', minValue: -120, maxValue: 500, createdAt: now },
+    { inspectionId: '', question: 'Communication / network handshake confirmed operational', type: 'PASS_FAIL', required: true, order: 5, createdAt: now },
+    { inspectionId: '', question: 'Corrective maintenance / component replacement completed', type: 'PASS_FAIL', required: true, order: 6, createdAt: now },
+    { inspectionId: '', question: 'Field technician observations & findings', type: 'TEXT', required: false, order: 7, createdAt: now },
+  ];
+
+  for (const issue of seedIssues) {
+    for (const q of genericChecklistQuestions) {
       await db.checklistItems.put({
-        ...item,
+        ...q,
         id: uuidv4(),
-        inspectionId: inspId,
+        inspectionId: issue.id,
       });
     }
   }
 
-  // ── Compressor Checklist ──────────────────────────────────
-  const compressorItems: Omit<ChecklistItem, 'id'>[] = [
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Air filter condition', type: 'GOOD_DAMAGED', required: true, order: 1, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Oil level within range', type: 'PASS_FAIL', required: true, order: 2, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Discharge pressure (bar)', type: 'NUMERIC', required: true, order: 3, unit: 'bar', minValue: 0, maxValue: 20, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Inlet temperature (°C)', type: 'NUMERIC', required: true, order: 4, unit: '°C', minValue: -10, maxValue: 60, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Safety relief valve functional', type: 'PASS_FAIL', required: true, order: 5, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Belts/couplings condition', type: 'GOOD_DAMAGED', required: true, order: 6, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'No air leaks detected', type: 'PASS_FAIL', required: true, order: 7, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000003', question: 'Operating hours since last service', type: 'NUMERIC', required: false, order: 8, unit: 'h', createdAt: now },
+  // ── Authentic Initial Audit Events across All Roles ────────────────────────
+  const initialAuditEvents = [
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.SUPERVISOR,
+      userName: 'Abi Kumar',
+      deviceId: 'device-supervisor',
+      entityType: 'INSPECTION',
+      entityId: 'b1000000-0000-0000-0000-000000000005',
+      inspectionId: 'b1000000-0000-0000-0000-000000000005',
+      action: 'INSPECTION_COMPLETED' as const,
+      field: 'resolutionSummary',
+      afterValue: 'Defective 24V DIN-rail power supply replaced. Gateway verified operational.',
+      createdAt: now,
+    },
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.TECHNICIAN,
+      userName: 'Elakkiya S',
+      deviceId: 'device-tech',
+      entityType: 'INSPECTION',
+      entityId: 'b1000000-0000-0000-0000-000000000002',
+      inspectionId: 'b1000000-0000-0000-0000-000000000002',
+      action: 'UPDATED' as const,
+      field: 'workflowStage',
+      afterValue: 'Awaiting verification after inline PoE testing',
+      createdAt: pastHour,
+    },
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.TECHNICIAN,
+      userName: 'Elakkiya S',
+      deviceId: 'device-tech',
+      entityType: 'INSPECTION',
+      entityId: 'b1000000-0000-0000-0000-000000000001',
+      inspectionId: 'b1000000-0000-0000-0000-000000000001',
+      action: 'UPDATED' as const,
+      field: 'status',
+      afterValue: 'Started field diagnostics on second-floor lab Wi-Fi',
+      createdAt: pastHour,
+    },
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.SUPERVISOR,
+      userName: 'Abi Kumar',
+      deviceId: 'device-supervisor',
+      entityType: 'INSPECTION',
+      entityId: 'b1000000-0000-0000-0000-000000000004',
+      inspectionId: 'b1000000-0000-0000-0000-000000000004',
+      action: 'CREATED' as const,
+      field: 'assignedTo',
+      afterValue: 'Assigned portal card reader dispatch to Elakkiya S',
+      createdAt: past2Hours,
+    },
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.CUSTOMER,
+      userName: 'Bob Abd',
+      deviceId: 'device-customer',
+      entityType: 'INSPECTION',
+      entityId: 'b1000000-0000-0000-0000-000000000003',
+      inspectionId: 'b1000000-0000-0000-0000-000000000003',
+      action: 'CREATED' as const,
+      field: 'title',
+      afterValue: 'Reported UPS battery audible alarm in Server Room B',
+      createdAt: past2Hours,
+    },
+    {
+      id: uuidv4(),
+      userId: REAL_USER_IDS.ADMIN,
+      userName: 'Tharun Erodde',
+      deviceId: 'device-admin',
+      entityType: 'SYNC',
+      entityId: 'b1000000-0000-0000-0000-000000000001',
+      inspectionId: 'b1000000-0000-0000-0000-000000000001',
+      action: 'SYNCED' as const,
+      afterValue: 'Cloud synchronization with Supabase completed successfully',
+      createdAt: past2Hours,
+    },
   ];
 
-  for (const item of compressorItems) {
-    await db.checklistItems.put({ ...item, id: uuidv4() });
+  for (const event of initialAuditEvents) {
+    await db.auditEvents.put(event);
   }
 
-  // ── Pump Checklist ────────────────────────────────────────
-  const pumpItems: Omit<ChecklistItem, 'id'>[] = [
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Pump casing condition', type: 'GOOD_DAMAGED', required: true, order: 1, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Flow rate acceptable (m³/h)', type: 'NUMERIC', required: true, order: 2, unit: 'm³/h', createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Seal leakage observed', type: 'BOOLEAN', required: true, order: 3, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Cavitation signs', type: 'BOOLEAN', required: true, order: 4, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Inlet/outlet pressure OK', type: 'PASS_FAIL', required: true, order: 5, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000004', question: 'Coupling alignment', type: 'PASS_FAIL', required: true, order: 6, createdAt: now },
-  ];
-
-  for (const item of pumpItems) {
-    await db.checklistItems.put({ ...item, id: uuidv4() });
-  }
-
-  // ── Generator Checklist ───────────────────────────────────
-  const generatorItems: Omit<ChecklistItem, 'id'>[] = [
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Fuel level (%)', type: 'NUMERIC', required: true, order: 1, unit: '%', minValue: 0, maxValue: 100, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Battery charge voltage (V)', type: 'NUMERIC', required: true, order: 2, unit: 'V', createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Coolant level OK', type: 'PASS_FAIL', required: true, order: 3, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Engine oil level OK', type: 'PASS_FAIL', required: true, order: 4, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Output voltage (V)', type: 'NUMERIC', required: true, order: 5, unit: 'V', createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'ATS (Auto Transfer Switch) tested', type: 'PASS_FAIL', required: true, order: 6, createdAt: now },
-    { inspectionId: 'i1000000-0000-0000-0000-000000000005', question: 'Load test performed', type: 'PASS_FAIL', required: false, order: 7, createdAt: now },
-  ];
-
-  for (const item of generatorItems) {
-    await db.checklistItems.put({ ...item, id: uuidv4() });
-  }
-
-  console.info('[Seed] Local database seeded with 5 inspections and 38 checklist items.');
+  console.info(`[Seed] Seeded ${seedIssues.length} generic field service issues, checklist items, and audit activities.`);
 }
 
 export const seedDatabase = seedLocalDatabase;

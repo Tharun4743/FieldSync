@@ -41,3 +41,7 @@ supabase/.temp/
 *.synctex.gz
 *.out
 
+# Binaries
+cloudflared.exe
+*.exe
+

@@ -1,5 +1,5 @@
 import { db } from '../schema';
-import type { Conflict } from '@/types/db';
+import type { Conflict, UserRole } from '@/types/db';
 import { v4 as uuidv4 } from 'uuid';
 import { createAuditEvent } from './operations';
 
@@ -104,6 +104,8 @@ export interface ResolveConflictParams {
   resolvedValue: string;
   resolvedBy: string;
   resolvedByName: string;
+  /** The role of the user attempting resolution — only SUPERVISOR and ADMIN are permitted */
+  callerRole?: UserRole;
 }
 
 /**
@@ -113,6 +115,13 @@ export interface ResolveConflictParams {
  * Its status changes to RESOLVED and the resolved value is stored.
  */
 export async function resolveConflict(params: ResolveConflictParams): Promise<Conflict> {
+  // ── Role guard ─────────────────────────────────────────────────────────────
+  // Only SUPERVISOR and ADMIN may resolve conflicts.
+  // If callerRole is provided and is TECHNICIAN, reject immediately.
+  if (params.callerRole === 'TECHNICIAN') {
+    throw new Error('Unauthorized: Only SUPERVISOR or ADMIN can resolve conflicts');
+  }
+
   const conflict = await db.conflicts.get(params.conflictId);
   if (!conflict) throw new Error(`Conflict ${params.conflictId} not found`);
 

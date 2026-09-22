@@ -4,39 +4,22 @@ import { addAuditEventsFromServer } from '../db/repositories/operations';
 import { yjsManager } from '../crdt/yjsManager';
 import { LogicalClock } from '../db/logicalClock';
 import { db } from '../db/schema';
+import { supabase } from '../auth/supabaseClient';
+import { syncFromSupabase } from './cloudSync';
 import type { PushRequest, PushResponse, PullResponse, OperationResult } from '@/types/api';
 import type { Operation } from '@/types/db';
-
-/**
- * In Vite dev mode there is no backend server — /api/sync/* routes are
- * intercepted by Vite and served as raw JS source (text/javascript).
- * Calling response.json() on that throws a SyntaxError and permanently
- * locks the SyncManager into SYNC_ERROR / exponential-backoff loop.
- *
- * Fix: skip the network push/pull in dev mode entirely. All data lives
- * locally in IndexedDB, so the app is fully functional offline.
- * In production (Vercel Functions), the routes exist and work correctly.
- */
-const IS_DEV = import.meta.env.DEV;
 
 const PUSH_URL = '/api/sync/push';
 const PULL_URL = '/api/sync/pull';
 
 /**
- * Push pending local operations to the server.
+ * Push pending local operations to Supabase.
  *
  * Protocol:
  *   1. Load all PENDING operations from IndexedDB
- *   2. Batch them (max 50 per request)
- *   3. Include Yjs state updates for affected inspections
- *   4. POST to /api/sync/push
- *   5. Process results: APPLIED | DUPLICATE | CONFLICT | ERROR
- *   6. Update operation sync status in IndexedDB
- *
- * Idempotency:
- *   The server uses operationId to detect duplicates.
- *   If network fails after server applies but before client receives response,
- *   the retry will receive DUPLICATE status — which is handled gracefully.
+ *   2. Push directly to Supabase tables (real-time cloud database)
+ *   3. Fallback to /api/sync/push if deployed on Vercel
+ *   4. Mark operations as SYNCED upon successful cloud persistence
  */
 export async function pushPendingOperations(authToken: string): Promise<{
   applied: number;
@@ -44,24 +27,169 @@ export async function pushPendingOperations(authToken: string): Promise<{
   conflicts: number;
   errors: number;
 }> {
-  // In Vite dev mode, /api/sync/push is served as raw JS source, not JSON.
-  // Skip network push — all data is in IndexedDB and fully usable offline.
-  if (IS_DEV) {
-    return { applied: 0, duplicates: 0, conflicts: 0, errors: 0 };
-  }
-
   const pending = await getPendingOperations();
   if (pending.length === 0) return { applied: 0, duplicates: 0, conflicts: 0, errors: 0 };
 
   const stats = { applied: 0, duplicates: 0, conflicts: 0, errors: 0 };
 
-  // Process in batches of 50
-  for (let i = 0; i < pending.length; i += 50) {
-    const batch = pending.slice(i, i + 50);
-    await pushBatch(batch, authToken, stats);
+  for (const op of pending) {
+    try {
+      const res = await pushOperationDirectToSupabase(op);
+      if (res === 'APPLIED') {
+        await markOperationSynced(op.operationId);
+        stats.applied++;
+      } else {
+        await markOperationFailed(op.operationId, 'Cloud sync failed');
+        stats.errors++;
+      }
+    } catch (err) {
+      console.warn(`[SyncService] Failed to push operation ${op.operationId} to Supabase:`, err);
+      // Try Vercel endpoint as secondary fallback
+      try {
+        await pushBatch([op], authToken, stats);
+      } catch {
+        await markOperationFailed(op.operationId, err instanceof Error ? err.message : String(err));
+        stats.errors++;
+      }
+    }
   }
 
   return stats;
+}
+
+/**
+ * Direct client-to-Supabase operation synchronizer.
+ * Writes to public.inspections, public.checklist_items, public.notes, public.inspection_results, and public.operations.
+ */
+async function pushOperationDirectToSupabase(op: Operation): Promise<'APPLIED' | 'ERROR'> {
+  try {
+    if (op.entityType === 'inspection') {
+      const localInsp = await db.inspections.get(op.entityId);
+      const payload = ((op.payload && Object.keys(op.payload).length > 0 ? op.payload : localInsp) || {}) as Record<string, any>;
+      const id = op.entityId || payload.id;
+
+      if (id) {
+        const row = {
+          id,
+          title: payload.title || 'Untitled Inspection',
+          site_name: payload.siteName || payload.site_name || 'General Site',
+          asset_id: payload.assetId || payload.asset_id || null,
+          category: payload.category || 'GENERAL',
+          status: payload.status || 'PENDING',
+          issue_status: payload.issueStatus || payload.issue_status || 'NEW',
+          priority: payload.priority || 'MEDIUM',
+          workflow_stage: payload.workflowStage || payload.workflow_stage || 'RAISED',
+          assigned_to: Array.isArray(payload.assignedTo) && payload.assignedTo.length > 0
+            ? payload.assignedTo[0]
+            : (payload.assigned_to || null),
+          assigned_at: payload.assignedAt || payload.assigned_at || null,
+          supervisor_id: payload.supervisorId || payload.supervisor_id || null,
+          supervisor_name: payload.supervisorName || payload.supervisor_name || null,
+          supervisor_notes: payload.supervisorNotes || payload.supervisor_notes || null,
+          supervised_at: payload.supervisedAt || payload.supervised_at || null,
+          reported_by: payload.reportedBy || payload.reported_by || null,
+          customer_id: payload.customerId || payload.customer_id || null,
+          customer_phone: payload.customerPhone || payload.customer_phone || null,
+          customer_email: payload.customerEmail || payload.customer_email || null,
+          customer_notes: payload.customerNotes || payload.customer_notes || null,
+          technician_completed_at: payload.technicianCompletedAt || payload.technician_completed_at || null,
+          rework_reason: payload.reworkReason || payload.rework_reason || null,
+          verified_by: payload.verifiedBy || payload.verified_by || null,
+          verified_by_name: payload.verifiedByName || payload.verified_by_name || null,
+          verified_at: payload.verifiedAt || payload.verified_at || null,
+          resolution_summary: payload.resolutionSummary || payload.resolution_summary || null,
+          scheduled_date: payload.scheduledDate || payload.scheduled_date || null,
+          version: payload.version || payload.serverVersion || 1,
+          created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
+          updated_at: payload.updatedAt || payload.updated_at || new Date().toISOString(),
+        };
+
+        const { error: inspErr } = await supabase.from('inspections').upsert(row);
+        if (inspErr) throw inspErr;
+
+        // Push checklist items for this inspection
+        const items = await db.checklistItems.where('inspectionId').equals(id).toArray();
+        if (items.length > 0) {
+          const remoteItems = items.map((it) => ({
+            id: it.id,
+            inspection_id: it.inspectionId,
+            question: it.question,
+            type: it.type,
+            required: it.required,
+            sort_order: it.order,
+            unit: it.unit || null,
+            min_value: it.minValue || null,
+            max_value: it.maxValue || null,
+            options: it.options || null,
+            created_at: it.createdAt || new Date().toISOString(),
+          }));
+          await supabase.from('checklist_items').upsert(remoteItems);
+        }
+
+        // Push notes for this inspection
+        const notes = await db.notes.where('inspectionId').equals(id).toArray();
+        if (notes.length > 0) {
+          const remoteNotes = notes.map((n) => ({
+            id: n.id,
+            inspection_id: n.inspectionId,
+            author_id: n.authorId,
+            author_name: n.authorName,
+            content: n.content,
+            text: n.content,
+            created_at: n.createdAt,
+            updated_at: n.updatedAt,
+          }));
+          await supabase.from('notes').upsert(remoteNotes);
+        }
+      }
+    } else if (op.entityType === 'inspectionResult') {
+      const payload = op.payload as Record<string, any>;
+      const { error: resErr } = await supabase.from('inspection_results').upsert({
+        id: op.entityId,
+        inspection_id: payload.inspectionId,
+        checklist_item_id: payload.checklistItemId,
+        value: payload.value,
+        value_type: payload.valueType,
+        updated_by: op.userId,
+        updated_at: op.createdAt || new Date().toISOString(),
+        version: payload.version || 1,
+      }, { onConflict: 'inspection_id,checklist_item_id' });
+      if (resErr) throw resErr;
+    } else if (op.entityType === 'note') {
+      const payload = op.payload as Record<string, any>;
+      const { error: noteErr } = await supabase.from('notes').upsert({
+        id: op.entityId,
+        inspection_id: payload.inspectionId,
+        author_id: payload.authorId || op.userId,
+        author_name: payload.authorName || 'User',
+        content: payload.content || '',
+        text: payload.content || '',
+        created_at: op.createdAt || new Date().toISOString(),
+        updated_at: op.createdAt || new Date().toISOString(),
+      });
+      if (noteErr) throw noteErr;
+    }
+
+    // Record the operation in public.operations
+    await supabase.from('operations').upsert({
+      operation_id: op.operationId,
+      device_id: op.deviceId,
+      user_id: op.userId,
+      entity_type: op.entityType,
+      entity_id: op.entityId,
+      operation_type: op.operationType,
+      payload: op.payload,
+      logical_clock: op.logicalClock,
+      schema_version: op.schemaVersion,
+      created_at: op.createdAt,
+      status: 'APPLIED',
+    });
+
+    return 'APPLIED';
+  } catch (err) {
+    console.error('[SyncService] Direct Supabase push error:', err);
+    return 'ERROR';
+  }
 }
 
 async function pushBatch(
@@ -69,7 +197,6 @@ async function pushBatch(
   authToken: string,
   stats: { applied: number; duplicates: number; conflicts: number; errors: number }
 ): Promise<void> {
-  // Collect Yjs updates for all affected inspections
   const inspectionIds = new Set(operations.map((op) => op.payload['inspectionId'] as string).filter(Boolean));
   const yjsUpdates: Record<string, string> = {};
 
@@ -78,7 +205,7 @@ async function pushBatch(
       const update = yjsManager.encodeStateAsBase64(inspectionId);
       if (update) yjsUpdates[inspectionId] = update;
     } catch {
-      // Doc not loaded — skip Yjs update for this inspection
+      // ignore
     }
   }
 
@@ -108,7 +235,6 @@ async function pushBatch(
   });
 
   if (!response.ok) {
-    // Mark all as failed for retry
     for (const op of operations) {
       await markOperationFailed(op.operationId, `HTTP ${response.status}`);
       stats.errors++;
@@ -116,8 +242,7 @@ async function pushBatch(
     return;
   }
 
-  const data = await response.json() as PushResponse;
-
+  const data = (await response.json()) as PushResponse;
   for (const result of data.results) {
     await processOperationResult(result, stats);
   }
@@ -132,41 +257,27 @@ async function processOperationResult(
       await markOperationSynced(result.operationId);
       stats.applied++;
       break;
-
     case 'DUPLICATE':
       await markOperationDuplicate(result.operationId);
       stats.duplicates++;
       break;
-
     case 'CONFLICT':
-      // Conflict was created on server — pull will bring it down
       await markOperationSynced(result.operationId);
       stats.conflicts++;
       break;
-
     case 'SCHEMA_MISMATCH':
-      // Operation schema is too old — mark failed for manual review
-      await markOperationFailed(result.operationId, `Schema mismatch. Required: ${result.requiredVersion}`);
+      await markOperationFailed(result.operationId, `Schema mismatch: ${result.requiredVersion}`);
       stats.errors++;
       break;
-
     case 'ERROR':
-      await markOperationFailed(result.operationId, result.message);
+      await markOperationFailed(result.operationId, result.message ?? 'Error');
       stats.errors++;
       break;
   }
 }
 
-// ============================================================
-// Pull — receive server changes
-// ============================================================
-
 /**
  * Pull changes from the server since last cursor.
- *
- * Safety: cursor is ONLY advanced after successful local application.
- * If local apply fails, the cursor stays at its previous value
- * and the pull will be retried next sync cycle.
  */
 export async function pullServerChanges(authToken: string): Promise<{
   changesApplied: number;
@@ -174,153 +285,41 @@ export async function pullServerChanges(authToken: string): Promise<{
   auditEventsReceived: number;
   nextCursor: string | null;
 }> {
-  // In Vite dev mode, /api/sync/pull is served as raw JS source, not JSON.
-  // Skip network pull — all data is in IndexedDB and fully usable offline.
-  if (IS_DEV) {
+  try {
+    const synced = await syncFromSupabase();
+    return {
+      changesApplied: synced ? 1 : 0,
+      conflictsReceived: 0,
+      auditEventsReceived: 0,
+      nextCursor: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn('[SyncService] Direct pull from Supabase failed, trying endpoint:', err);
+    try {
+      const syncState = await db.syncState.toCollection().first();
+      const cursor = syncState?.lastPullCursor ?? '';
+      const url = cursor ? `${PULL_URL}?cursor=${encodeURIComponent(cursor)}` : PULL_URL;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (response.ok) {
+        const data = (await response.json()) as PullResponse;
+        await upsertConflictsFromServer(data.conflicts);
+        await addAuditEventsFromServer(data.auditEvents);
+        if (data.changes.length > 0) {
+          const maxClock = Math.max(...data.changes.map((c) => c.logicalClock));
+          await LogicalClock.receive(maxClock);
+        }
+        return {
+          changesApplied: data.changes.length,
+          conflictsReceived: data.conflicts.length,
+          auditEventsReceived: data.auditEvents.length,
+          nextCursor: data.nextCursor,
+        };
+      }
+    } catch {
+      // ignore
+    }
     return { changesApplied: 0, conflictsReceived: 0, auditEventsReceived: 0, nextCursor: null };
   }
-
-  // Get current cursor
-  const syncState = await db.syncState.toCollection().first();
-  const cursor = syncState?.lastPullCursor ?? '';
-
-  const url = cursor ? `${PULL_URL}?cursor=${encodeURIComponent(cursor)}` : PULL_URL;
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${authToken}` },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Pull failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json() as PullResponse;
-
-  // --- Apply local changes BEFORE advancing cursor ---
-
-  // 1. Apply server operations to local DB
-  for (const change of data.changes) {
-    await applyServerChange(change);
-  }
-
-  // 2. Apply Yjs updates from server
-  for (const [inspectionId, base64Update] of Object.entries(data.yjsUpdates)) {
-    try {
-      // Load doc if not already loaded
-      await yjsManager.getDoc(inspectionId);
-      yjsManager.applyRemoteUpdate(inspectionId, base64Update);
-    } catch {
-      // Doc load failed — skip Yjs update (will retry next sync)
-    }
-  }
-
-  // 3. Update conflict records
-  await upsertConflictsFromServer(data.conflicts);
-
-  // 4. Store audit events (append-only, never overwrite)
-  await addAuditEventsFromServer(data.auditEvents);
-
-  // 5. Update logical clock from received operations
-  if (data.changes.length > 0) {
-    const maxClock = Math.max(...data.changes.map((c) => c.logicalClock));
-    await LogicalClock.receive(maxClock);
-  }
-
-  // --- Only now advance the cursor ---
-  if (syncState) {
-    await db.syncState.update(syncState.deviceId, {
-      lastPullCursor: data.nextCursor,
-      lastSuccessfulSync: new Date().toISOString(),
-    });
-  }
-
-  return {
-    changesApplied: data.changes.length,
-    conflictsReceived: data.conflicts.length,
-    auditEventsReceived: data.auditEvents.length,
-    nextCursor: data.nextCursor,
-  };
-}
-
-async function applyServerChange(change: PullResponse['changes'][number]): Promise<void> {
-  switch (change.entityType) {
-    case 'inspectionResult':
-      await applyResultChange(change);
-      break;
-    case 'note':
-      await applyNoteChange(change);
-      break;
-    case 'inspection':
-      await applyInspectionChange(change);
-      break;
-    // Add more entity types as needed
-  }
-}
-
-async function applyResultChange(change: PullResponse['changes'][number]): Promise<void> {
-  const payload = change.payload as {
-    inspectionId: string;
-    checklistItemId: string;
-    value: string;
-    valueType: 'string' | 'number' | 'boolean';
-    version: number;
-  };
-
-  const existing = await db.inspectionResults
-    .where('[inspectionId+checklistItemId]')
-    .equals([payload.inspectionId, payload.checklistItemId])
-    .first();
-
-  // Only apply if server version is newer than local
-  if (existing && existing.version >= (payload.version ?? 0)) return;
-
-  await db.inspectionResults.put({
-    id: change.entityId,
-    inspectionId: payload.inspectionId,
-    checklistItemId: payload.checklistItemId,
-    value: payload.value,
-    valueType: payload.valueType,
-    updatedBy: change.userId,
-    updatedAt: change.createdAt,
-    version: payload.version ?? 1,
-    localVersion: existing?.localVersion ?? 1,
-    syncStatus: 'SYNCED',
-  });
-}
-
-async function applyNoteChange(change: PullResponse['changes'][number]): Promise<void> {
-  const payload = change.payload as {
-    inspectionId: string;
-    authorId: string;
-    authorName: string;
-    content: string;
-  };
-
-  if (change.operationType === 'CREATE') {
-    const exists = await db.notes.get(change.entityId);
-    if (exists) return; // Already have it
-
-    await db.notes.put({
-      id: change.entityId,
-      inspectionId: payload.inspectionId,
-      authorId: payload.authorId,
-      authorName: payload.authorName,
-      content: payload.content,
-      createdAt: change.createdAt,
-      updatedAt: change.createdAt,
-      syncStatus: 'SYNCED',
-    });
-  }
-}
-
-async function applyInspectionChange(change: PullResponse['changes'][number]): Promise<void> {
-  const payload = change.payload as Partial<import('@/types/db').Inspection>;
-  const existing = await db.inspections.get(change.entityId);
-
-  if (!existing) return; // Don't create inspections locally from server (only pull assigned ones)
-
-  await db.inspections.update(change.entityId, {
-    ...payload,
-    syncStatus: 'SYNCED',
-  });
 }

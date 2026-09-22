@@ -20,9 +20,25 @@ export default function ConflictCenter() {
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
 
   const isSupervisorOrAdmin = user?.role === 'SUPERVISOR' || user?.role === 'ADMIN';
+  const isTechnician = user?.role === 'TECHNICIAN';
+
+  // Fetch all inspections to scope conflict visibility for technicians
+  const inspections = useLiveQuery(() => db.inspections.toArray(), []);
+  const inspectionMap = Object.fromEntries(
+    inspections?.map((i: Inspection) => [i.id, i]) ?? []
+  );
+
+  // Technicians only see conflicts on their assigned inspections
+  const myInspectionIds = isTechnician
+    ? new Set(
+        (inspections ?? [])
+          .filter((i: Inspection) => i.assignedTo.includes(user?.id ?? ''))
+          .map((i: Inspection) => i.id)
+      )
+    : null;
 
   const openConflicts = useLiveQuery(
-    () => db.conflicts.where('status').equals('PENDING').toArray(),
+    () => db.conflicts.where('status').equals('OPEN').toArray(),
     []
   ) ?? [];
 
@@ -31,12 +47,18 @@ export default function ConflictCenter() {
     []
   ) ?? [];
 
-  const inspections = useLiveQuery(() => db.inspections.toArray(), []);
-  const inspectionMap = Object.fromEntries(
-    inspections?.map((i: Inspection) => [i.id, i]) ?? []
-  );
+  // Apply scoping filter for technicians
+  const filteredOpen = myInspectionIds
+    ? openConflicts.filter((c: Conflict) => myInspectionIds.has(c.inspectionId))
+    : openConflicts;
 
-  const displayList = activeTab === 'OPEN' ? openConflicts : resolvedConflicts;
+  const filteredResolved = myInspectionIds
+    ? resolvedConflicts.filter((c: Conflict) => myInspectionIds.has(c.inspectionId))
+    : resolvedConflicts;
+
+
+  const displayList = activeTab === 'OPEN' ? filteredOpen : filteredResolved;
+
 
   async function handleResolve(conflict: Conflict, chosenValue: string) {
     if (!user) return;
@@ -47,6 +69,7 @@ export default function ConflictCenter() {
         resolvedValue: chosenValue,
         resolvedBy: user.id,
         resolvedByName: user.fullName || user.email,
+        callerRole: user.role,
       });
     } catch (err) {
       console.error('[ConflictCenter] Failed to resolve conflict:', err);
@@ -80,7 +103,7 @@ export default function ConflictCenter() {
             }`}
           >
             <ShieldAlert size={14} />
-            Open ({openConflicts.length})
+            Open ({filteredOpen.length})
           </button>
           <button
             onClick={() => setActiveTab('RESOLVED')}
@@ -91,17 +114,17 @@ export default function ConflictCenter() {
             }`}
           >
             <History size={14} />
-            History ({resolvedConflicts.length})
+            History ({filteredResolved.length})
           </button>
         </div>
       </div>
 
       {/* Role Notice */}
       {!isSupervisorOrAdmin && activeTab === 'OPEN' && (
-        <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200/80 text-indigo-900 text-xs flex items-center gap-2.5 font-medium">
+        <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200/80 text-sky-900 text-xs flex items-center gap-2.5 font-medium">
           <span className="text-base">ℹ️</span>
           <span>
-            Logged in as <strong>Technician</strong>. Viewing mode active; Supervisor or Admin can officially adjudicate conflicting values.
+            Logged in as <strong>Technician</strong>. Read-only view — showing conflicts on your assigned inspections only. A Supervisor or Admin can officially adjudicate conflicting values.
           </span>
         </div>
       )}

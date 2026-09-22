@@ -17,7 +17,9 @@ import OverviewTab from '../components/inspection/OverviewTab';
 import VoiceNotesTab from '../components/inspection/VoiceNotesTab';
 import QuickInspectionView from '../components/inspection/QuickInspectionView';
 import { saveProgress, syncProgressFromDB } from '../lib/db/repositories/progress';
-import { ArrowLeft, AlertTriangle, Zap } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Zap, CheckCircle2, Send, Clock } from 'lucide-react';
+import WorkflowStepper from '../components/inspection/WorkflowStepper';
+import SupervisorWorkflowActions from '../components/inspection/SupervisorWorkflowActions';
 import type { ChecklistItem, InspectionResult, Inspection, Asset, Note } from '@/types/db';
 import type * as Y from 'yjs';
 
@@ -31,6 +33,8 @@ export default function InspectionDetailPage() {
   const [isQuickMode, setIsQuickMode] = useState(false);
   const [lastSavedItemId, setLastSavedItemId] = useState<string | undefined>(undefined);
   const [, setYjsDoc] = useState<Y.Doc | null>(null);
+  const [submittingWork, setSubmittingWork] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   // Check URL parameters (e.g. ?mode=quick or ?item=xxx)
   useEffect(() => {
@@ -248,6 +252,64 @@ export default function InspectionDetailPage() {
     void syncManager.syncNow();
   }
 
+  async function handleTechnicianSubmitWork(): Promise<void> {
+    if (!user || !id || !inspection) return;
+    setSubmittingWork(true);
+    try {
+      const now = new Date().toISOString();
+      const updated: Inspection = {
+        ...inspection,
+        workflowStage: 'AWAITING_VERIFICATION',
+        technicianCompletedAt: now,
+        localVersion: inspection.localVersion + 1,
+        updatedAt: now,
+      };
+
+      await db.inspections.put(updated);
+
+      await db.notes.put({
+        id: crypto.randomUUID(),
+        inspectionId: id,
+        authorId: user.id,
+        authorName: user.fullName,
+        content: `[TECHNICIAN WORK COMPLETED by ${user.fullName}]: Field inspection and measurements completed. Work submitted for supervisor quality verification.`,
+        syncStatus: 'PENDING',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await createAuditEvent({
+        userId: user.id,
+        userName: user.fullName,
+        entityType: 'INSPECTION',
+        entityId: id,
+        inspectionId: id,
+        action: 'INSPECTION_COMPLETED',
+        field: 'workflowStage',
+        beforeValue: inspection.workflowStage || 'FIELD_WORK',
+        afterValue: 'AWAITING_VERIFICATION',
+        metadata: {
+          submittedBy: user.fullName,
+          timestamp: now,
+        },
+      });
+
+      setSubmitSuccess(true);
+      setTimeout(() => setSubmitSuccess(false), 5000);
+      void syncManager.syncNow();
+    } catch (err) {
+      console.error('Failed to submit field work:', err);
+    } finally {
+      setSubmittingWork(false);
+    }
+  }
+
+  const isSupervisor = user?.role === 'SUPERVISOR';
+  const isAdmin = user?.role === 'ADMIN';
+  const isCompleted = inspection.status === 'COMPLETED' || inspection.workflowStage === 'RESOLVED';
+  const isAwaitingVerification = inspection.workflowStage === 'AWAITING_VERIFICATION';
+  const isReadOnly = isSupervisor || isCompleted || (user?.role === 'TECHNICIAN' && isAwaitingVerification);
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview',     label: 'Overview' },
     { key: 'checklist',    label: 'Checklist' },
@@ -278,6 +340,11 @@ export default function InspectionDetailPage() {
                     {asset.assetCode}
                   </span>
                 )}
+                {isReadOnly && (
+                  <span className="text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    👁 Reviewer Mode
+                  </span>
+                )}
                 {(conflictCount ?? 0) > 0 && (
                   <Link to="/conflicts" className="flex items-center gap-1 text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full">
                     <AlertTriangle size={10} />
@@ -289,14 +356,16 @@ export default function InspectionDetailPage() {
               <p className="text-zinc-500 text-xs font-medium mt-0.5">{inspection.siteName}</p>
             </div>
 
-            <button
-              onClick={() => setIsQuickMode(!isQuickMode)}
-              className="h-10 px-4 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-sm shadow-indigo-100 transition-all cursor-pointer shrink-0"
-              id="btn-toggle-quick-mode"
-            >
-              <Zap size={15} />
-              {isQuickMode ? 'Standard View' : 'Quick Mode'}
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setIsQuickMode(!isQuickMode)}
+                className="h-10 px-4 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shadow-sm shadow-indigo-100 transition-all cursor-pointer shrink-0"
+                id="btn-toggle-quick-mode"
+              >
+                <Zap size={15} />
+                {isQuickMode ? 'Standard View' : 'Quick Mode'}
+              </button>
+            )}
           </div>
 
           {/* Tabs */}
@@ -320,8 +389,90 @@ export default function InspectionDetailPage() {
       </div>
 
       {/* Tab Content or Quick Mode View */}
-      <div className="flex-1 w-full p-4 sm:p-5">
-        {isQuickMode ? (
+      <div className="flex-1 w-full p-4 sm:p-5 space-y-4">
+        {/* Interactive 6-Stage Workflow Stepper */}
+        <WorkflowStepper inspection={inspection} />
+
+        {/* Technician Work Submission Success Alert */}
+        {submitSuccess && (
+          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center gap-3 animate-fade-in shadow-xs">
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+            <div>
+              <p className="font-bold">Work Submitted for Quality Verification!</p>
+              <p className="font-normal text-emerald-700 text-[11px] mt-0.5">
+                The supervisor has been notified. This ticket is now in stage 5 (Awaiting Verification).
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Supervisor Workflow Actions Bar (Coordinate / Dispatch / Verify / Rework) */}
+        {(isSupervisor || isAdmin) && (
+          <SupervisorWorkflowActions inspection={inspection} />
+        )}
+
+        {/* Technician Active Field Work Action Banner */}
+        {user?.role === 'TECHNICIAN' &&
+          (inspection.workflowStage === 'FIELD_WORK' ||
+            inspection.workflowStage === 'REWORK_REQUESTED' ||
+            (!inspection.workflowStage && inspection.status === 'IN_PROGRESS')) && (
+            <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200 text-sky-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0">
+                  <Send size={15} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-sky-950">Field Work in Progress</h4>
+                  <p className="text-[11px] text-sky-700">
+                    Complete your checklist answers, measurements, and photos. When finished, submit for Supervisor Verification.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleTechnicianSubmitWork}
+                disabled={submittingWork}
+                className="h-9 px-4 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-sky-200 shrink-0"
+                id="btn-technician-submit-work"
+              >
+                <CheckCircle2 size={14} />
+                {submittingWork ? 'Submitting…' : 'Submit Work for Supervisor Verification'}
+              </button>
+            </div>
+          )}
+
+        {/* Technician Awaiting Verification Notice */}
+        {user?.role === 'TECHNICIAN' && inspection.workflowStage === 'AWAITING_VERIFICATION' && (
+          <div className="p-3.5 rounded-2xl bg-violet-50 border border-violet-200 text-violet-900 text-xs flex items-center gap-2.5 font-medium shadow-2xs">
+            <Clock size={16} className="text-violet-600 shrink-0" />
+            <span>
+              <strong>Work Submitted for Verification</strong> — Your findings and measurements have been sent to the Supervisor for final quality review and sign-off.
+            </span>
+          </div>
+        )}
+
+        {/* Resolved Banner */}
+        {(inspection.workflowStage === 'RESOLVED' || inspection.status === 'COMPLETED') && (
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5 font-medium shadow-2xs">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>
+              <strong>Issue Formally Resolved</strong> — Verified by{' '}
+              <strong>{inspection.verifiedByName || 'Authorized Supervisor'}</strong> on{' '}
+              {inspection.verifiedAt ? new Date(inspection.verifiedAt).toLocaleDateString() : 'recent'}. Records are locked for audit compliance.
+            </span>
+          </div>
+        )}
+
+        {/* Reviewer mode banner for supervisors when not yet verified */}
+        {isReadOnly && inspection.status !== 'COMPLETED' && inspection.workflowStage !== 'RESOLVED' && (
+          <div className="p-3 rounded-2xl bg-purple-50/70 border border-purple-200/80 text-purple-900 text-xs flex items-center gap-2 font-medium">
+            <span className="text-sm">👁</span>
+            <span>
+              <strong>Reviewer Mode</strong> — Viewing checklist and field records. Use the Supervisor Quality actions above to verify completion or request rework.
+            </span>
+          </div>
+        )}
+        {isQuickMode && !isReadOnly ? (
           <QuickInspectionView
             inspection={inspection}
             asset={asset}
@@ -343,16 +494,17 @@ export default function InspectionDetailPage() {
                 results={resultsMap}
                 onUpdate={handleResultUpdate}
                 filterType={activeTab === 'measurements' ? 'NUMERIC' : 'other'}
+                readOnly={isReadOnly}
               />
             )}
             {activeTab === 'notes' && (
-              <NotesTab inspectionId={id!} onSubmit={handleNoteSubmit} />
+              <NotesTab inspectionId={id!} onSubmit={handleNoteSubmit} readOnly={isReadOnly} />
             )}
             {activeTab === 'voice' && (
-              <VoiceNotesTab inspectionId={id!} />
+              <VoiceNotesTab inspectionId={id!} readOnly={isReadOnly} />
             )}
             {activeTab === 'photos' && (
-              <PhotosTab inspectionId={id!} onCapture={handlePhotoCapture} />
+              <PhotosTab inspectionId={id!} onCapture={handlePhotoCapture} readOnly={isReadOnly} />
             )}
             {activeTab === 'history' && (
               <HistoryTab inspectionId={id!} />
