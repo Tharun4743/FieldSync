@@ -5,9 +5,16 @@
 //   1. navigator.onLine — fast but unreliable (only detects NIC state)
 //   2. /api/health fetch — actual connectivity verification
 //
-// navigator.onLine can be true even when the network doesn't
-// route to the internet (e.g., captive portals, local network).
-// The health check is the source of truth.
+// IMPORTANT DEV NOTE:
+//   In Vite dev mode, /api/health is served as raw JS source
+//   (text/javascript), NOT as executable JSON. Calling response.json()
+//   would throw a SyntaxError, landing in the catch block and
+//   incorrectly marking the app OFFLINE even when internet is available.
+//
+//   Fix: check Content-Type before parsing JSON. If the response is
+//   not application/json (dev mode), trust navigator.onLine instead.
+//   In production (Vercel), /api/health runs server-side and returns
+//   proper JSON, so the full verification path is used.
 // ============================================================
 
 import type { HealthResponse } from '@/types/api';
@@ -15,6 +22,9 @@ import type { HealthResponse } from '@/types/api';
 const HEALTH_URL = '/api/health';
 const HEALTH_TIMEOUT_MS = 5000;
 const POLL_INTERVAL_MS = 30000;
+
+/** Returns true if we are running inside Vite's local dev server */
+const IS_DEV = import.meta.env.DEV;
 
 type ConnectivityListener = (online: boolean) => void;
 
@@ -68,7 +78,15 @@ class ConnectivityDetector {
       return false;
     }
 
-    // Verify with actual HTTP request
+    // In Vite dev mode, /api/health is served as JS source code, not JSON.
+    // Attempting response.json() would throw a SyntaxError and permanently
+    // mark the app as OFFLINE. Trust navigator.onLine in dev mode instead.
+    if (IS_DEV) {
+      this._setOnline(true);
+      return true;
+    }
+
+    // Production: verify with actual HTTP request to the Vercel function
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
@@ -81,17 +99,33 @@ class ConnectivityDetector {
 
       clearTimeout(timeout);
 
-      if (response.ok) {
+      if (!response.ok) {
+        this._setOnline(false);
+        return false;
+      }
+
+      // Guard against non-JSON responses (e.g., CDN error pages)
+      const contentType = response.headers.get('Content-Type') ?? '';
+      if (!contentType.includes('application/json')) {
+        // Server is reachable but not returning our JSON — treat as online
+        // (the request succeeded = internet is working)
+        this._setOnline(true);
+        return true;
+      }
+
+      try {
         const data = await response.json() as HealthResponse;
         const online = data.status === 'ok';
         this._setOnline(online);
         return online;
-      } else {
-        this._setOnline(false);
-        return false;
+      } catch {
+        // JSON parse error — server reachable but response malformed
+        // Internet is working, so mark online
+        this._setOnline(true);
+        return true;
       }
     } catch {
-      // Network error or timeout
+      // Network error or timeout — genuinely offline
       this._setOnline(false);
       return false;
     }

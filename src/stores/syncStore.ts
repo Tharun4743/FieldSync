@@ -30,6 +30,17 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
   isSyncing: false,
 
   initialize: () => {
+    // Immediately read the current syncManager state (catches races
+    // where syncManager.start() fired before this store was created).
+    const currentStatus = syncManager.status;
+    set({ status: currentStatus, isSyncing: currentStatus === 'SYNCING' });
+
+    // Optimistically mark ONLINE if browser reports internet right now,
+    // so the UI never flashes "Offline" when the device is connected.
+    if (navigator.onLine && currentStatus === 'OFFLINE') {
+      set({ status: 'ONLINE' });
+    }
+
     // Subscribe to sync manager state changes
     syncManager.subscribe((status) => {
       set({ status, isSyncing: status === 'SYNCING' });
@@ -44,6 +55,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     // Initial counts
     void get().refreshCounts();
   },
+
 
   refreshCounts: async () => {
     const [pendingOps, pendingMedia, conflicts] = await Promise.all([

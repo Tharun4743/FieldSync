@@ -74,10 +74,12 @@ class SyncManager {
 
   private async _onConnected(): Promise<void> {
     if (this._status !== 'OFFLINE' && this._status !== 'SYNC_ERROR') return;
+    // Mark ONLINE immediately so the UI reflects real network status,
+    // even before auth token is available (e.g., Supabase session loading).
     this._setStatus('ONLINE');
     this._retryCount = 0;
 
-    // Auto-sync when connectivity returns
+    // Auto-sync when connectivity returns (no-ops if no auth token yet)
     await this._performSync();
   }
 
