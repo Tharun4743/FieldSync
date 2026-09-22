@@ -1,0 +1,12 @@
+\ProvidesFile{tupcr.fd}[Font definitions for TU/pcr]
+\DeclareFontFamily{TU}{pcr}{}
+\DeclareFontShape{TU}{pcr}{m}{n}{<-> ssub * lmtt/m/n}{}
+\DeclareFontShape{TU}{pcr}{b}{n}{<-> ssub * lmtt/bx/n}{}
+\DeclareFontShape{TU}{pcr}{bx}{n}{<-> ssub * lmtt/bx/n}{}
+\DeclareFontShape{TU}{pcr}{m}{it}{<-> ssub * lmtt/m/sl}{}
+\DeclareFontShape{TU}{pcr}{b}{it}{<-> ssub * lmtt/bx/sl}{}
+\DeclareFontShape{TU}{pcr}{bx}{it}{<-> ssub * lmtt/bx/sl}{}
+\DeclareFontShape{TU}{pcr}{m}{sl}{<-> ssub * lmtt/m/sl}{}
+\DeclareFontShape{TU}{pcr}{b}{sl}{<-> ssub * lmtt/bx/sl}{}
+\DeclareFontShape{TU}{pcr}{bx}{sl}{<-> ssub * lmtt/bx/sl}{}
+\endinput

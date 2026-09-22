@@ -1,0 +1,43 @@
+# dependencies
+node_modules
+dist
+
+# environment
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Editor
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test output
+coverage
+playwright-report
+test-results
+
+# Build caches
+dev-dist/
+*.tsbuildinfo
+supabase/.temp/
+
+
+# LaTeX auxiliary files (preserve .pdf, .tex, .bib, .cls, .bst, .fd)
+*.aux
+*.log
+*.blg
+*.synctex.gz
+*.out
+

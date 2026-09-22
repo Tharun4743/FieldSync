@@ -1,0 +1,318 @@
+import type { ChecklistItemRecord, InspectionResultRecord } from '../../types/db.types';
+import { useState, useRef } from 'react';
+import { CheckCircle2, AlertCircle, Volume2, Mic, Camera, XCircle, ChevronDown } from 'lucide-react';
+import { readAloud } from '@/lib/speech/speechService';
+import { useLanguageStore } from '@/stores/languageStore';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
+import { queueMedia } from '@/lib/db/repositories/media';
+import { useAuthStore } from '@/stores/authStore';
+
+interface Props {
+  items: ChecklistItemRecord[];
+  results: Record<string, InspectionResultRecord>;
+  onUpdate: (item: ChecklistItemRecord, value: string) => Promise<void>;
+  filterType?: 'NUMERIC' | 'other';
+}
+
+export default function ChecklistTab({ items, results, onUpdate, filterType }: Props) {
+  const displayItems = filterType === 'NUMERIC'
+    ? items.filter(i => i.type === 'NUMERIC')
+    : filterType === 'other'
+    ? items.filter(i => i.type !== 'NUMERIC')
+    : items;
+
+  if (displayItems.length === 0) {
+    return (
+      <div className="text-center text-zinc-400 py-16 bg-white rounded-2xl border border-zinc-200/80 p-8 shadow-sm">
+        <p className="font-semibold text-sm">No {filterType === 'NUMERIC' ? 'measurement' : 'checklist'} items for this inspection.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {displayItems.map(item => (
+        <ChecklistItemCard
+          key={item.id}
+          item={item}
+          result={results[item.id]}
+          onUpdate={(value) => onUpdate(item, value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ChecklistItemCard({
+  item,
+  result,
+  onUpdate,
+}: {
+  item: ChecklistItemRecord;
+  result?: InspectionResultRecord;
+  onUpdate: (value: string) => Promise<void>;
+}) {
+  const { user } = useAuthStore();
+  const { language, t } = useLanguageStore();
+  const [isReading, setIsReading] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const value = result?.value ?? '';
+  const hasValue = value !== '';
+
+  async function handleRead() {
+    setIsReading(true);
+    await readAloud(item.question, language, () => setIsReading(false));
+  }
+
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) return;
+    setCapturingPhoto(true);
+    try {
+      const file = files[0];
+      await queueMedia({
+        inspectionId: item.inspectionId,
+        checklistItemId: item.id,
+        file,
+        fileName: file.name,
+        userId: user.id,
+      });
+    } catch (err) {
+      console.error('Error saving checklist photo:', err);
+    } finally {
+      setCapturingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  return (
+    <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-sm space-y-3" id={`checklist-item-${item.id}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-zinc-900 font-bold text-sm leading-snug">{item.question}</p>
+            <button
+              type="button"
+              onClick={() => void handleRead()}
+              className={`p-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+                isReading ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+              }`}
+              title="Read Aloud"
+            >
+              <Volume2 size={13} />
+            </button>
+          </div>
+          {item.required && (
+            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60 inline-block mt-1">
+              Required
+            </span>
+          )}
+        </div>
+        {hasValue ? (
+          <CheckCircle2 size={20} className="text-emerald-600 shrink-0 mt-0.5" />
+        ) : (
+          <AlertCircle size={20} className="text-zinc-300 shrink-0 mt-0.5" />
+        )}
+      </div>
+
+      <ChecklistInput item={item} value={value} onChange={onUpdate} />
+
+      {/* Item Attachments Bar: Voice Note & Photo */}
+      <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+            className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer"
+          >
+            <Mic size={12} className="text-indigo-600" />
+            {t('term.voiceNote')}
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={capturingPhoto}
+            className="h-7 px-2 rounded-lg font-bold text-[11px] bg-zinc-50 hover:bg-zinc-100 text-zinc-600 flex items-center gap-1 border border-zinc-200 cursor-pointer disabled:opacity-50"
+          >
+            <Camera size={12} className="text-indigo-600" />
+            {capturingPhoto ? 'Saving...' : t('term.photo')}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => void handlePhotoCapture(e)}
+          />
+        </div>
+
+        {result && (
+          <p className="text-[11px] font-medium text-zinc-400">
+            Last updated: {new Date(result.updatedAt).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+
+      {showVoiceRecorder && (
+        <div className="pt-2">
+          <VoiceNoteRecorder
+            inspectionId={item.inspectionId}
+            checklistItemId={item.id}
+            onSaved={() => setShowVoiceRecorder(false)}
+            onCancel={() => setShowVoiceRecorder(false)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChecklistInput({
+  item,
+  value,
+  onChange,
+}: {
+  item: ChecklistItemRecord;
+  value: string;
+  onChange: (value: string) => Promise<void>;
+}) {
+  switch (item.type) {
+    case 'PASS_FAIL':
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onChange('PASS')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'PASS'
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-pass-${item.id}`}
+          >
+            <CheckCircle2 size={16} /> PASS
+          </button>
+          <button
+            onClick={() => onChange('FAIL')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'FAIL'
+                ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-fail-${item.id}`}
+          >
+            <XCircle size={16} /> FAIL
+          </button>
+        </div>
+      );
+
+    case 'GOOD_DAMAGED':
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onChange('GOOD')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'GOOD'
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-good-${item.id}`}
+          >
+            <CheckCircle2 size={16} /> GOOD
+          </button>
+          <button
+            onClick={() => onChange('DAMAGED')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'DAMAGED'
+                ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-damaged-${item.id}`}
+          >
+            <XCircle size={16} /> DAMAGED
+          </button>
+        </div>
+      );
+
+    case 'BOOLEAN':
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => onChange('YES')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'YES'
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-yes-${item.id}`}
+          >
+            YES
+          </button>
+          <button
+            onClick={() => onChange('NO')}
+            className={`flex-1 h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              value === 'NO'
+                ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            }`}
+            id={`result-no-${item.id}`}
+          >
+            NO
+          </button>
+        </div>
+      );
+
+    case 'NUMERIC':
+      return (
+        <div className="flex gap-2 items-center">
+          <input
+            type="number"
+            className="flex-1 h-10 px-3.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+            placeholder={item.unit ? `Enter value (${item.unit})` : 'Enter value'}
+            defaultValue={value}
+            onBlur={e => { if (e.target.value !== value) onChange(e.target.value); }}
+            min={item.minValue}
+            max={item.maxValue}
+            id={`result-numeric-${item.id}`}
+          />
+          {item.unit && (
+            <span className="text-zinc-500 font-mono font-bold text-xs px-2">{item.unit}</span>
+          )}
+        </div>
+      );
+
+    case 'SELECT':
+      return (
+        <div className="relative">
+          <select
+            className="w-full h-10 px-3.5 pr-10 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            id={`result-select-${item.id}`}
+          >
+            <option value="">Select an option…</option>
+            {item.options?.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+        </div>
+      );
+
+    case 'TEXT':
+    default:
+      return (
+        <textarea
+          className="w-full p-3 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+          rows={3}
+          placeholder="Enter observation notes…"
+          defaultValue={value}
+          onBlur={e => { if (e.target.value !== value) onChange(e.target.value); }}
+          id={`result-text-${item.id}`}
+        />
+      );
+  }
+}

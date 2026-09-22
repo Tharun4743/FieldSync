@@ -1,0 +1,12 @@
+\ProvidesFile{tuphv.fd}[Font definitions for TU/phv]
+\DeclareFontFamily{TU}{phv}{}
+\DeclareFontShape{TU}{phv}{m}{n}{<-> ssub * lmss/m/n}{}
+\DeclareFontShape{TU}{phv}{b}{n}{<-> ssub * lmss/bx/n}{}
+\DeclareFontShape{TU}{phv}{bx}{n}{<-> ssub * lmss/bx/n}{}
+\DeclareFontShape{TU}{phv}{m}{it}{<-> ssub * lmss/m/sl}{}
+\DeclareFontShape{TU}{phv}{b}{it}{<-> ssub * lmss/bx/sl}{}
+\DeclareFontShape{TU}{phv}{bx}{it}{<-> ssub * lmss/bx/sl}{}
+\DeclareFontShape{TU}{phv}{m}{sl}{<-> ssub * lmss/m/sl}{}
+\DeclareFontShape{TU}{phv}{b}{sl}{<-> ssub * lmss/bx/sl}{}
+\DeclareFontShape{TU}{phv}{bx}{sl}{<-> ssub * lmss/bx/sl}{}
+\endinput
