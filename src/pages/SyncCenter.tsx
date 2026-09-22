@@ -43,29 +43,66 @@ export default function SyncCenter() {
   );
   const logicalClockVal = useLiveQuery(() => db.syncState.toCollection().first(), []);
 
-  // Storage calculations from IndexedDB
-  const [storageEstimate, setStorageEstimate] = useState<{ total: number; quota: number }>({ total: 0, quota: 0 });
+  // Live inspection data counts for real storage breakdown
+  const allInspections = useLiveQuery(() => db.inspections.toArray(), []);
+  const allChecklistItems = useLiveQuery(() => db.checklistItems.toArray(), []);
+  const allNotes = useLiveQuery(() => db.notes.toArray(), []);
+  const allResults = useLiveQuery(() => db.inspectionResults.toArray(), []);
+
+  // Real navigator.storage.estimate() — no hardcoded fallbacks
+  const [storageEstimate, setStorageEstimate] = useState<{ total: number; quota: number; ready: boolean }>({
+    total: 0,
+    quota: 0,
+    ready: false,
+  });
 
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
-      navigator.storage.estimate().then((est) => {
-        setStorageEstimate({
-          total: est.usage || 0,
-          quota: est.quota || 0,
+    let cancelled = false;
+    const refresh = () => {
+      if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+        navigator.storage.estimate().then((est) => {
+          if (!cancelled) {
+            setStorageEstimate({
+              total: est.usage ?? 0,
+              quota: est.quota ?? 0,
+              ready: true,
+            });
+          }
+        }).catch(() => {
+          if (!cancelled) setStorageEstimate((prev) => ({ ...prev, ready: true }));
         });
-      }).catch(() => {});
-    }
-  }, [allMedia, allVoiceNotes, operations]);
+      } else {
+        if (!cancelled) setStorageEstimate((prev) => ({ ...prev, ready: true }));
+      }
+    };
+    refresh();
+    return () => { cancelled = true; };
+  // Re-measure whenever any live data changes
+  }, [allMedia, allVoiceNotes, operations, allInspections, allChecklistItems, allNotes, allResults]);
 
-  const photosBytes = (allMedia || []).reduce((acc, m) => acc + (m.size || 0), 0);
-  const voiceBytes = (allVoiceNotes || []).reduce((acc, v) => acc + (v.totalBytes || 0), 0);
-  const inspectionDataBytes = Math.max(0, storageEstimate.total - photosBytes - voiceBytes);
+  // Bytes summed from actual IndexedDB record fields (only records that have local blobs)
+  const photosBytes = (allMedia ?? []).reduce((acc, m) => acc + (m.size ?? 0), 0);
+  const voiceBytes = (allVoiceNotes ?? []).reduce((acc, v) => acc + (v.totalBytes ?? 0), 0);
+  // Inspection data = total browser storage minus known media blobs
+  // If storageEstimate not ready yet, show 0 (not a fake number)
+  const inspectionDataBytes = storageEstimate.ready
+    ? Math.max(0, storageEstimate.total - photosBytes - voiceBytes)
+    : 0;
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 MB';
+  const formatBytes = (bytes: number, ready = true) => {
+    if (!ready) return '…';
+    if (bytes === 0) return '0 B';
     const mb = bytes / (1024 * 1024);
-    if (mb < 0.1) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${mb.toFixed(1)} MB`;
+    if (mb < 0.01) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${mb.toFixed(2)} MB`;
+  };
+
+  const formatQuota = (bytes: number, ready = true) => {
+    if (!ready) return '…';
+    if (bytes === 0) return 'Unknown';
+    const gb = bytes / (1024 * 1024 * 1024);
+    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
   };
 
   const handleManualSync = async () => {
@@ -223,7 +260,7 @@ export default function SyncCenter() {
           <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200/70">
             <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">Storage Used</span>
             <p className="text-sm font-black font-mono text-indigo-600 mt-1">
-              {formatBytes(storageEstimate.total || photosBytes + voiceBytes + 13 * 1024 * 1024)}
+              {formatBytes(storageEstimate.total, storageEstimate.ready)}
             </p>
           </div>
         </div>
@@ -274,30 +311,51 @@ export default function SyncCenter() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {/* Total Used */}
           <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/70">
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">Total Used</span>
             <p className="text-xl font-black font-mono text-zinc-900 mt-1">
-              {formatBytes(storageEstimate.total || photosBytes + voiceBytes + 13 * 1024 * 1024)}
+              {formatBytes(storageEstimate.total, storageEstimate.ready)}
             </p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">Quota: {formatBytes(storageEstimate.quota || 1024 * 1024 * 1024)}</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              Quota: {formatQuota(storageEstimate.quota, storageEstimate.ready)}
+            </p>
           </div>
 
+          {/* Photos */}
           <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/70">
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">Photos</span>
-            <p className="text-xl font-black font-mono text-sky-600 mt-1">{formatBytes(photosBytes)}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{allMedia?.length || 0} photo records</p>
+            <p className="text-xl font-black font-mono text-sky-600 mt-1">
+              {formatBytes(photosBytes, allMedia !== undefined)}
+            </p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {allMedia === undefined ? '…' : `${allMedia.length} photo record${allMedia.length !== 1 ? 's' : ''}`}
+            </p>
           </div>
 
+          {/* Voice Notes */}
           <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/70">
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">Voice Notes</span>
-            <p className="text-xl font-black font-mono text-rose-600 mt-1">{formatBytes(voiceBytes)}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{allVoiceNotes?.length || 0} audio records</p>
+            <p className="text-xl font-black font-mono text-rose-600 mt-1">
+              {formatBytes(voiceBytes, allVoiceNotes !== undefined)}
+            </p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {allVoiceNotes === undefined ? '…' : `${allVoiceNotes.length} audio record${allVoiceNotes.length !== 1 ? 's' : ''}`}
+            </p>
           </div>
 
+          {/* Inspection Data */}
           <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/70">
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">Inspection Data</span>
-            <p className="text-xl font-black font-mono text-emerald-600 mt-1">{formatBytes(inspectionDataBytes || 13 * 1024 * 1024)}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">Checklists, results, Yjs</p>
+            <p className="text-xl font-black font-mono text-emerald-600 mt-1">
+              {formatBytes(inspectionDataBytes, storageEstimate.ready)}
+            </p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {allInspections === undefined
+                ? '…'
+                : `${allInspections.length} inspection${allInspections.length !== 1 ? 's' : ''} · ${allChecklistItems?.length ?? 0} items · ${allNotes?.length ?? 0} note${(allNotes?.length ?? 0) !== 1 ? 's' : ''}`
+              }
+            </p>
           </div>
         </div>
 
