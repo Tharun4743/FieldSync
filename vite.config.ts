@@ -15,6 +15,8 @@ export default defineConfig({
         name: 'FieldSync',
         short_name: 'FieldSync',
         description: 'Local-first collaborative field inspection platform',
+        id: '/',
+        lang: 'en',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
