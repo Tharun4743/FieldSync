@@ -1,4 +1,4 @@
-# FieldSync ΓÇö Offline-First Collaborative Field Inspection PWA
+# FieldSync — Offline-First Collaborative Field Inspection PWA
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF.svg)](https://vitejs.dev/)
@@ -9,11 +9,11 @@
 [![Cloudinary](https://img.shields.io/badge/Cloudinary-Resumable%20Media-blueviolet.svg)](https://cloudinary.com/)
 [![Testing](https://img.shields.io/badge/Vitest-Passed%20(21%2F21)-green.svg)](https://vitest.dev/)
 
-> **FieldSync** is a production-grade, offline-first Progressive Web Application (PWA) built for industrial, utility, and infrastructure inspections in environments with zero connectivity. It features a complete **4-role enterprise lifecycle (Customer ΓåÆ Admin ΓåÆ Supervisor ΓåÆ Technician)**, real-time bi-directional Supabase PostgreSQL synchronization, Cloudinary resumable media uploads, Yjs CRDT conflict resolution, and immutable append-only audit histories.
+> **FieldSync** is a production-grade, offline-first Progressive Web Application (PWA) built for industrial, utility, and infrastructure inspections in environments with zero connectivity. It features a complete **4-role enterprise lifecycle (Customer → Admin → Supervisor → Technician)**, real-time bi-directional Supabase PostgreSQL synchronization, Cloudinary resumable media uploads, Yjs CRDT conflict resolution, and immutable append-only audit histories.
 
 ---
 
-## ≡ƒîÉ Live Demonstration & Public Tunnel
+## 🌐 Live Demonstration & Public Tunnel
 
 FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge Tunnels:
 
@@ -22,7 +22,7 @@ FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge T
 
 ---
 
-## ≡ƒÄ» Problem Statement (WA-1) & Enterprise Scope
+## 🎯 Problem Statement (WA-1) & Enterprise Scope
 
 **WA-1. Offline-First Collaborative Field Inspection App**
 - **Problem**: Technicians inspect critical industrial machinery, substations, and network facilities in locations with zero cellular coverage (basements, remote switchyards, subterranean conduits).
@@ -31,7 +31,7 @@ FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge T
 
 ---
 
-## ≡ƒæÑ 4-Role Enterprise Workflow
+## 👥 4-Role Enterprise Workflow
 
 FieldSync organizes field inspection into four specialized, authenticated roles:
 
@@ -76,11 +76,11 @@ graph TD
 
 ---
 
-## ≡ƒÅ¢∩╕Å System Architecture
+## 🏛️ System Architecture
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Device (FieldSync PWA ┬╖ Zero Network Dependency)"]
+    subgraph Client ["Client Device (FieldSync PWA · Zero Network Dependency)"]
         UI["Tactile UI Layer: Quick Inspection / Conflict Center / Audit History"]
         RoleRouter["Role-Based Workspace Guard (Admin / Supervisor / Tech / Customer)"]
         Lang["Offline i18n Manager (6 Languages: EN, TA, HI, TE, KN, ML)"]
@@ -134,7 +134,7 @@ graph TD
 
 ---
 
-## ≡ƒÆí How FieldSync Solves the Core Challenges
+## 💡 How FieldSync Solves the Core Challenges
 
 ### 1. Robust Bi-Directional Cloud Synchronization
 - **Online Execution**: Mutations are pushed immediately to Supabase PostgreSQL (`public.inspections`, `public.checklist_items`, `public.inspection_results`, `public.notes`, `public.audit_events`).
@@ -160,9 +160,9 @@ graph TD
 
 ---
 
-## ΓÜí Multimodal Offline Productivity Features
+## ⚡ Multimodal Offline Productivity Features
 
-1. **Tactile Quick Inspection Mode**: Single-tap binary/ternary decision pills (`[ PASS ] [ FAIL ]`, `[ GOOD ] [ DAMAGED ]`), numeric steppers with units ($^\circ$C, bar, PSI), and single-action `[ SAVE & NEXT ΓåÆ ]` progression.
+1. **Tactile Quick Inspection Mode**: Single-tap binary/ternary decision pills (`[ PASS ] [ FAIL ]`, `[ GOOD ] [ DAMAGED ]`), numeric steppers with units ($^\circ$C, bar, PSI), and single-action `[ SAVE & NEXT → ]` progression.
 2. **Inspection Progress Bookmarking**: Dedicated `inspectionProgress` table tracks completion count, percentage, and exact checklist positions. Closing the app or browser mid-inspection preserves progress, providing an immediate **"Resume Inspection"** card on the dashboard.
 3. **Offline Voice Notes**: Built-in HTML5 `MediaRecorder` audio recorder saving binary Blobs in IndexedDB with interactive waveform playback.
 4. **Offline Read Aloud (TTS)**: Built on the W3C `SpeechSynthesis` API to speak checklist instructions and safety alerts aloud for hands-free inspection.
@@ -172,7 +172,7 @@ graph TD
 
 ---
 
-## ≡ƒº¬ Automated Testing & Verification
+## 🧪 Automated Testing & Verification
 
 FieldSync maintains 21 automated unit and integration tests across 4 test suites:
 
@@ -195,7 +195,7 @@ npm run build
 
 ---
 
-## ≡ƒÜÇ Local Development Setup
+## 🚀 Local Development Setup
 
 ```bash
 # Clone the repository
@@ -212,7 +212,7 @@ npm run dev
 Navigate to `http://localhost:5173` to test locally, or use the live Cloudflare tunnel link above.
 
 
-## License & Intellectual Property Notice
+## ðŸ“œ License & Intellectual Property Notice
 
 > [!CAUTION]
 > ### ðŸ”’ PROPRIETARY & CONFIDENTIAL INTELLECTUAL PROPERTY â€” ALL RIGHTS RESERVED
@@ -226,7 +226,7 @@ Navigate to `http://localhost:5173` to test locally, or use the live Cloudflare 
 
 ---
 
-## Engineering Author
+## ðŸ‘¨â€ðŸ’» Engineering Author
 
 <table border="0">
   <tr>
