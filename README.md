@@ -1,4 +1,4 @@
-# FieldSync — Offline-First Collaborative Field Inspection PWA
+# FieldSync ΓÇö Offline-First Collaborative Field Inspection PWA
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF.svg)](https://vitejs.dev/)
@@ -9,11 +9,11 @@
 [![Cloudinary](https://img.shields.io/badge/Cloudinary-Resumable%20Media-blueviolet.svg)](https://cloudinary.com/)
 [![Testing](https://img.shields.io/badge/Vitest-Passed%20(21%2F21)-green.svg)](https://vitest.dev/)
 
-> **FieldSync** is a production-grade, offline-first Progressive Web Application (PWA) built for industrial, utility, and infrastructure inspections in environments with zero connectivity. It features a complete **4-role enterprise lifecycle (Customer → Admin → Supervisor → Technician)**, real-time bi-directional Supabase PostgreSQL synchronization, Cloudinary resumable media uploads, Yjs CRDT conflict resolution, and immutable append-only audit histories.
+> **FieldSync** is a production-grade, offline-first Progressive Web Application (PWA) built for industrial, utility, and infrastructure inspections in environments with zero connectivity. It features a complete **4-role enterprise lifecycle (Customer ΓåÆ Admin ΓåÆ Supervisor ΓåÆ Technician)**, real-time bi-directional Supabase PostgreSQL synchronization, Cloudinary resumable media uploads, Yjs CRDT conflict resolution, and immutable append-only audit histories.
 
 ---
 
-## 🌐 Live Demonstration & Public Tunnel
+## ≡ƒîÉ Live Demonstration & Public Tunnel
 
 FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge Tunnels:
 
@@ -22,7 +22,7 @@ FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge T
 
 ---
 
-## 🎯 Problem Statement (WA-1) & Enterprise Scope
+## ≡ƒÄ» Problem Statement (WA-1) & Enterprise Scope
 
 **WA-1. Offline-First Collaborative Field Inspection App**
 - **Problem**: Technicians inspect critical industrial machinery, substations, and network facilities in locations with zero cellular coverage (basements, remote switchyards, subterranean conduits).
@@ -31,7 +31,7 @@ FieldSync runs locally and is deployed globally via high-speed Cloudflare Edge T
 
 ---
 
-## 👥 4-Role Enterprise Workflow
+## ≡ƒæÑ 4-Role Enterprise Workflow
 
 FieldSync organizes field inspection into four specialized, authenticated roles:
 
@@ -76,11 +76,11 @@ graph TD
 
 ---
 
-## 🏛️ System Architecture
+## ≡ƒÅ¢∩╕Å System Architecture
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Device (FieldSync PWA · Zero Network Dependency)"]
+    subgraph Client ["Client Device (FieldSync PWA ┬╖ Zero Network Dependency)"]
         UI["Tactile UI Layer: Quick Inspection / Conflict Center / Audit History"]
         RoleRouter["Role-Based Workspace Guard (Admin / Supervisor / Tech / Customer)"]
         Lang["Offline i18n Manager (6 Languages: EN, TA, HI, TE, KN, ML)"]
@@ -134,7 +134,7 @@ graph TD
 
 ---
 
-## 💡 How FieldSync Solves the Core Challenges
+## ≡ƒÆí How FieldSync Solves the Core Challenges
 
 ### 1. Robust Bi-Directional Cloud Synchronization
 - **Online Execution**: Mutations are pushed immediately to Supabase PostgreSQL (`public.inspections`, `public.checklist_items`, `public.inspection_results`, `public.notes`, `public.audit_events`).
@@ -160,9 +160,9 @@ graph TD
 
 ---
 
-## ⚡ Multimodal Offline Productivity Features
+## ΓÜí Multimodal Offline Productivity Features
 
-1. **Tactile Quick Inspection Mode**: Single-tap binary/ternary decision pills (`[ PASS ] [ FAIL ]`, `[ GOOD ] [ DAMAGED ]`), numeric steppers with units ($^\circ$C, bar, PSI), and single-action `[ SAVE & NEXT → ]` progression.
+1. **Tactile Quick Inspection Mode**: Single-tap binary/ternary decision pills (`[ PASS ] [ FAIL ]`, `[ GOOD ] [ DAMAGED ]`), numeric steppers with units ($^\circ$C, bar, PSI), and single-action `[ SAVE & NEXT ΓåÆ ]` progression.
 2. **Inspection Progress Bookmarking**: Dedicated `inspectionProgress` table tracks completion count, percentage, and exact checklist positions. Closing the app or browser mid-inspection preserves progress, providing an immediate **"Resume Inspection"** card on the dashboard.
 3. **Offline Voice Notes**: Built-in HTML5 `MediaRecorder` audio recorder saving binary Blobs in IndexedDB with interactive waveform playback.
 4. **Offline Read Aloud (TTS)**: Built on the W3C `SpeechSynthesis` API to speak checklist instructions and safety alerts aloud for hands-free inspection.
@@ -172,7 +172,7 @@ graph TD
 
 ---
 
-## 🧪 Automated Testing & Verification
+## ≡ƒº¬ Automated Testing & Verification
 
 FieldSync maintains 21 automated unit and integration tests across 4 test suites:
 
@@ -195,7 +195,7 @@ npm run build
 
 ---
 
-## 🚀 Local Development Setup
+## ≡ƒÜÇ Local Development Setup
 
 ```bash
 # Clone the repository
@@ -210,3 +210,53 @@ npm run dev
 ```
 
 Navigate to `http://localhost:5173` to test locally, or use the live Cloudflare tunnel link above.
+
+
+## License & Intellectual Property Notice
+
+> [!CAUTION]
+> ### ðŸ”’ PROPRIETARY & CONFIDENTIAL INTELLECTUAL PROPERTY â€” ALL RIGHTS RESERVED
+>
+> All rights reserved. This repository, its architecture, source code, workflows, models, and associated documentation are the exclusive intellectual property of **Tharunkumar Kâ„¢**.
+>
+> **STRICT NOTICE:** No individual, organization, institution, or commercial entity is permitted to use, copy, modify, distribute, reproduce, sublicense, reverse-engineer, deploy, or commercially exploit any portion of this project without express, prior written permission from **Tharunkumar K**.
+>
+> **Copyright Â© 2026 Tharunkumar K. All Rights Reserved.**  
+> See the [LICENSE](LICENSE) file for complete legal terms.
+
+---
+
+## Engineering Author
+
+<table border="0">
+  <tr>
+    <td width="120" align="center" valign="top">
+      <img src="https://github.com/Tharun4743.png" width="100" style="border-radius: 50%;" alt="Tharunkumar K" />
+    </td>
+    <td>
+      <h3>Tharunkumar K</h3>
+      <p>
+        <b>Full Stack Developer & AI Systems Engineer</b><br/>
+        ðŸŽ“ B.Tech in Information Technology â€” <a href="https://vsbec.com"><b>V.S.B. Engineering College, Karur</b></a> (Batch 2024â€“2028)<br/>
+        ðŸŒŸ Recognized for holding the <b>Best GitHub Profile & Top Student Developer</b> at V.S.B. Engineering College (VSBEC)<br/>
+        ðŸ¥‡ <b>Winner â€” Code Thugs 2K26</b> â€¢ ðŸš€ <b>Smart India Hackathon (SIH)</b> Top 50 National Finalist
+      </p>
+      <p>
+        <a href="https://tharunkumark4743.netlify.app/">ðŸŒ Portfolio</a> â€¢
+        <a href="https://github.com/Tharun4743">ðŸ™ GitHub (@Tharun4743)</a> â€¢
+        <a href="https://www.linkedin.com/in/tharunkumark4743">ðŸ’¼ LinkedIn</a> â€¢
+        <a href="https://leetcode.com/u/Tharunkumar__K/">ðŸ§© LeetCode</a> â€¢
+        <a href="mailto:tharunkumark42007@gmail.com">ðŸ“§ Email</a>
+      </p>
+    </td>
+  </tr>
+</table>
+<!-- =========================================================================
+   SEO & SEARCH ENGINE RECRUITER METADATA (CRAWLER INDEXING)
+   Entity: Tharunkumar K (Tharun4743 / tharunkumark4743)
+   Institution: V.S.B. Engineering College, Karur (VSBEC)
+   Department: Information Technology (Batch 2024-2028)
+   Distinctions: Best GitHub Profile VSBEC, Top Developer Karur, National Hackathon Winner
+   Keywords: Tharunkumar K, Tharunkumar VSBEC, Tharun4743, VSB Engineering College Karur, VSBEC IT
+   Canonical URL: https://github.com/Tharun4743/FieldSync
+========================================================================= -->
